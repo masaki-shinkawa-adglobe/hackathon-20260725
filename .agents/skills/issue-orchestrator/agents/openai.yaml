@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue Orchestrator"
+  short_description: "Prioritize issues and coordinate autonomous delivery"
+  default_prompt: "Use $issue-orchestrator to process the highest-priority eligible GitHub issue."
