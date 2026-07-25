@@ -2,6 +2,19 @@
 
 GitHub Issueを優先度・依存関係順に1件選び、実装、PRレビュー、squash merge、Issue Close、後片付けまで自律実行する3 Skill構成です。
 
+## Webアプリケーション開発環境
+
+リポジトリ直下に、次の構成でWebアプリケーション開発環境を構築します。
+
+- Node.js 24 LTS、pnpm 11
+- Next.js 16.2.9、TypeScript 5.1以上、App Router、ESLint
+- アプリケーションコードは `src/app` に配置し、インポートエイリアスは `@/*` を使用
+- Tailwind CSS 4.3とPostCSSを使用
+- Vitest 4.1.6、React Testing Library、jsdomによるコンポーネントテスト
+- Pull Requestと `main` へのpushでlint、test、buildを実行するGitHub Actions
+
+Tailwind CSS 4.3の対象ブラウザはChrome 111以上、Safari 16.4以上、Firefox 128以上とします。エンドユーザー向け機能、認証、データ保存、デプロイ、E2Eテスト、非同期Server Componentの単体テスト、旧ブラウザ対応は初期構築の対象外です。
+
 ## 起動
 
 ```text
