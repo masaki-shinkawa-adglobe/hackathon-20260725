@@ -61,13 +61,13 @@ Before acting, read [references/protocol.md](references/protocol.md) completely 
 ## Run Independent Reviews
 
 1. Create a fresh review pane and agent for every review attempt. Use the main repository as `--cwd`; never use the implementation worktree.
-2. Start Codex with `gpt-5.6`, `model_reasoning_effort="high"`, approval policy `never`, and a read-oriented sandbox that still permits required GitHub review operations.
+2. Start Codex with `gpt-5.6-sol`, `model_reasoning_effort="high"`, approval policy `never`, and a read-oriented sandbox that still permits required GitHub review operations.
 3. If the model is unavailable, retry with the environment default and retain a warning.
 4. Prompt only with `$issue-reviewer`, the Issue URL, PR URL, and attempt number.
 5. Poll as for the worker. Accept only `MERGED`, `NG`, or `BLOCKED`.
 6. Close the review pane immediately after recording its structured result.
 7. On `NG`, replace `status:review` with `status:in-progress` and prompt the existing worker to read and fix every unresolved PR review thread. Do not load comment bodies into the main context.
-8. After two `NG` verdicts, restart the worker in its existing worktree with `gpt-5.6` and `model_reasoning_effort="high"` for the final correction. Warn if fallback is required.
+8. After two `NG` verdicts, restart the worker in its existing worktree with `gpt-5.6-sol` and `model_reasoning_effort="high"` for the final correction. Warn if fallback is required.
 9. Allow at most three review attempts. After the third `NG`, apply `status:blocked` and return `NG`.
 10. On reviewer `BLOCKED`, apply `status:blocked` and return `BLOCKED`.
 

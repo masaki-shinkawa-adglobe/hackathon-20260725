@@ -81,8 +81,8 @@ Returns:
 | Role | Preferred model | Reasoning |
 |---|---|---|
 | Worker, attempts 1-2 | `gpt-5.6-terra` | `medium` |
-| Worker, final correction | `gpt-5.6` | `high` |
-| Reviewer | `gpt-5.6` | `high` |
+| Worker, final correction | `gpt-5.6-sol` | `high` |
+| Reviewer | `gpt-5.6-sol` | `high` |
 
 If a preferred model cannot start, retry with the environment default and record:
 
