@@ -21,6 +21,15 @@ $issue-orchestrator 123
 | `issue-orchestrator` | Issue選定、状態管理、Herdrペイン/worktree、再試行、Close、cleanup |
 | `issue-implementer` | 実装、テスト、commit/push、PR作成・修正 |
 | `issue-reviewer` | Issue/PRレビュー、inlineコメント、CI確認、squash merge |
+| `issue-requirements-interviewer` | 要件を1問ずつ整理し、合意済みの実装単位をIssue化 |
+
+## 要件ヒアリング
+
+新機能や計画を対話で整理してIssue化する場合は、次を使用します。Skillは既存のドメイン文書・コード・Issueを調査し、質問を1回に1つだけ行います。確定した実装単位からIssue化しますが、実装は開始しません。
+
+```text
+$issue-requirements-interviewer
+```
 
 ## 優先度と状態
 
