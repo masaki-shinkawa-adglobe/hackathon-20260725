@@ -1,4 +1,4 @@
 interface:
-  display_name: "Issue Orchestrator"
-  short_description: "Prioritize issues and coordinate autonomous delivery"
-  default_prompt: "Use $issue-orchestrator to process the highest-priority eligible GitHub issue."
+  display_name: "Issue Controller Guide"
+  short_description: "Guide deterministic Controller issue delivery"
+  default_prompt: "Use $issue-orchestrator to show the safe issue-controller command for my requested Issue work."

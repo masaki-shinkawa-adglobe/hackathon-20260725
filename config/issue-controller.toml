@@ -1,0 +1,38 @@
+version = 1
+
+[repository]
+base_branch = "main"
+remote = "origin"
+
+[sandbox]
+runner = "bubblewrap"
+required = true
+
+[secret_scan]
+runtime = "/usr/bin/docker"
+image_lock = "tools/gitleaks-image.lock"
+timeout_seconds = 120
+required = true
+
+[planner]
+model = "gpt-5.6-terra"
+reasoning_effort = "medium"
+fallback = "deterministic"
+
+[scheduler]
+max_parallel = 2
+same_file_policy = "block"
+base_update_policy = "block"
+
+[policy]
+forbidden_paths = [".git", ".env", ".env.*", "*.pem", "*.key"]
+protected_paths = [".github/workflows", "AGENTS.md", ".agents", ".gitleaks.toml", ".gitleaksignore", "tools/issue_controller"]
+
+[merge]
+allowed_paths = ["docs/**", "README.md"]
+denied_paths = [".github/**", "config/**", "migrations/**", "**/package.json", "**/package-lock.json", "**/pnpm-lock.yaml", "**/yarn.lock", "**/bun.lock*"]
+
+[[verify.commands]]
+name = "unit-tests"
+argv = ["python3", "-m", "unittest", "discover", "-s", "tools/issue_controller/tests", "-v"]
+timeout_seconds = 300

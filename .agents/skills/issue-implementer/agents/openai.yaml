@@ -1,4 +1,4 @@
 interface:
   display_name: "Issue Implementer"
-  short_description: "Implement an issue and maintain its pull request"
-  default_prompt: "Use $issue-implementer to implement the provided GitHub issue in this worktree."
+  short_description: "Implement and test one Controller worktree"
+  default_prompt: "Use $issue-implementer to implement the assigned Issue and return the Controller result JSON."

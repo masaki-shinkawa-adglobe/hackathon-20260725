@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "issue-controller"
+version = "0.1.0"
+description = "Trusted controller for parallel GitHub Issue delivery"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+issue-controller = "issue_controller.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "tools"}
+packages = ["issue_controller"]
+
+[tool.setuptools.package-data]
+issue_controller = ["prompts/*.md"]

@@ -1,4 +1,4 @@
 interface:
   display_name: "Issue Reviewer"
-  short_description: "Review an issue pull request and merge when ready"
-  default_prompt: "Use $issue-reviewer to review the provided Issue and PR, then merge only when ready."
+  short_description: "Return read-only Controller review JSON"
+  default_prompt: "Use $issue-reviewer to perform the assigned read-only review and return its marker JSON."
