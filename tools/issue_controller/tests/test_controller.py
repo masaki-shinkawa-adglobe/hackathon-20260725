@@ -65,6 +65,7 @@ class _FakeAgents:
   def collect(self,*,name,**kwargs):
     self.events.append(("collect",name))
     if "plan-" in name:
+      if isinstance(self.planner_error, Exception): raise self.planner_error
       if self.planner_error: raise RuntimeError(self.planner_error)
       return type("Run",(),{"result":self.planner_result,"ended_at":"now"})()
     if "review" in name:
@@ -165,6 +166,13 @@ class ControllerTests(unittest.TestCase):
       controller=self._controller_with_fakes(d);controller.config=ControllerConfig(max_parallel=2,planner_fallback="deterministic");controller.agents.planner_error="agent timeout"
       state=controller.start([1],no_publish=True)
       self.assertTrue(state["planner_fallback"])
+
+  def test_planner_result_parse_error_is_reported_as_planner_failure(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);controller.agents.planner_error=ValueError("result marker not found")
+      with self.assertRaisesRegex(RuntimeError,"blocked:planner-failed"): controller.start([1],no_publish=True)
+      self.assertEqual(controller.store.load().planner_error,"blocked:planner-failed")
+      self.assertFalse(any(call[0]=="add" for call in controller.git.calls))
 
   def test_publish_fails_closed_for_dirty_head_and_base_updates(self):
     with tempfile.TemporaryDirectory() as d:
@@ -341,6 +349,17 @@ class ControllerTests(unittest.TestCase):
     runner=Runner();adapter=HerdrAdapter(runner)
     self.assertEqual(adapter.split(Path("/tmp")),"pane:opaque/1")
     self.assertEqual(runner.argv[0][:6],["herdr","pane","split","--current","--direction","right"])
+
+  def test_herdr_prompt_waits_for_post_submission_state_change(self):
+    class Runner(ProcessRunner):
+      def __init__(self): self.argv=[]
+      def checked(self, argv, **kwargs):
+        self.argv.append(list(argv));return ProcessResult(tuple(argv),0,"","")
+    runner=Runner();HerdrAdapter(runner).prompt("issue-1-worker","implement")
+    self.assertEqual(
+      runner.argv[0],
+      ["herdr","agent","prompt","issue-1-worker","implement","--wait","--until","working","--until","idle","--until","done","--until","blocked","--timeout","30000"],
+    )
   def test_agent_rejects_legacy_user_config_layer(self):
     class FakeHerdr: pass
     with tempfile.TemporaryDirectory() as d:

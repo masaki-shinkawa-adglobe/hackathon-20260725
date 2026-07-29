@@ -795,7 +795,7 @@ class Controller:
                 started_monotonic=time.monotonic(),
                 log_name=f"{name}.log",
             )
-        except RuntimeError as exc:
+        except (RuntimeError, ValueError) as exc:
             if "timeout" in str(exc).lower() and self.config.planner_fallback == "deterministic":
                 state.plan = deterministic_plan(sorted(candidates), self.config.max_parallel)
                 state.planner_fallback = True

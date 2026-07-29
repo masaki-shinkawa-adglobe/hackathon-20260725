@@ -638,7 +638,26 @@ class HerdrAdapter:
 
     def prompt(self, name: str, text: str) -> None:
         safe_name(name, "agent name")
-        self.runner.checked(["herdr", "agent", "prompt", name, text])
+        self.runner.checked(
+            [
+                "herdr",
+                "agent",
+                "prompt",
+                name,
+                text,
+                "--wait",
+                "--until",
+                "working",
+                "--until",
+                "idle",
+                "--until",
+                "done",
+                "--until",
+                "blocked",
+                "--timeout",
+                "30000",
+            ]
+        )
 
     def get(self, name: str) -> dict[str, Any]:
         safe_name(name, "agent name")
