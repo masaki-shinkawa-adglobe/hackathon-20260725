@@ -6,12 +6,12 @@ from tools.issue_controller.agent_runner import HerdrAgentRunner
 from tools.issue_controller.adapters import Change, WorktreeRecord
 from tools.issue_controller.adapters import GitAdapter
 from tools.issue_controller.adapters import HerdrAdapter
-from tools.issue_controller.config import ControllerConfig, load_config
+from tools.issue_controller.config import ControllerConfig, VerifyCommand, load_config
 from tools.issue_controller.controller import Controller
 from tools.issue_controller.gitleaks import GitleaksDocker
 from tools.issue_controller.plan_schema import validate_plan
 from tools.issue_controller.policy import LowRiskInput, low_risk_reasons
-from tools.issue_controller.process_runner import ProcessRunner
+from tools.issue_controller.process_runner import ProcessResult, ProcessRunner
 from tools.issue_controller.result_parser import review_result, worker_result
 from tools.issue_controller.state import StateStore
 from tools.issue_controller.validation import branch, issue_number, relative_path, worktree_path
@@ -119,6 +119,21 @@ class ControllerTests(unittest.TestCase):
       self.assertEqual(len({state["issues"]["1"]["worktree"],state["issues"]["2"]["worktree"]}),2)
       self.assertFalse(controller.gh.created);self.assertFalse(controller.gh.merges)
       self.assertFalse(any(call[0]=="push" for call in controller.git.calls))
+
+  def test_fixed_verifier_runs_directly_in_issue_worktree(self):
+    class Capture(ProcessRunner):
+      def __init__(self): self.calls=[]
+      def run(self,argv,**kwargs):
+        self.calls.append((list(argv),kwargs))
+        return ProcessResult(tuple(argv),0,"ok","")
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);capture=Capture();controller.runner=capture
+      controller.agents.planner_result={"schema_version":1,"batches":[{"issues":[1],"reason":"independent"}],"dependencies":[],"clarifications":[],"warnings":[]}
+      controller.config=ControllerConfig(max_parallel=2,verify_commands=(VerifyCommand("unit",("python3","-m","unittest"),30),))
+      state=controller.start([1],no_publish=True)
+      verifier=next(call for call in capture.calls if call[0]==["python3","-m","unittest"])
+      self.assertEqual(verifier[1]["cwd"],Path(state["issues"]["1"]["worktree"]))
+      self.assertEqual(verifier[1]["timeout"],30)
 
   def test_start_runs_read_only_planner_before_creating_worktrees(self):
     with tempfile.TemporaryDirectory() as d:
