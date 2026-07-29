@@ -39,6 +39,9 @@ class IssueState:
     branch: str = ""
     worktree: str = ""
     pane_id: str | None = None
+    # `pane_id` is retained for states written by older controllers.  New
+    # controllers record every non-planner pane they own here.
+    owned_panes: list[str] = field(default_factory=list)
     agent_name: str = ""
     phase: Phase = Phase.DISCOVERED
     attempt: int = 1
@@ -61,6 +64,11 @@ class IssueState:
     clarification_comment_url: str | None = None
     clarification_answer: dict[str, str] | None = None
     publish_requested: bool = True
+    # Cleanup is deliberately independent from delivery.  In particular, a
+    # successfully merged PR remains DONE when a local cleanup needs recovery.
+    cleanup_status: str = "pending"
+    cleanup_error: str | None = None
+    cleanup_completed_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -71,6 +79,11 @@ class IssueState:
     def from_dict(cls, value: dict[str, Any]) -> "IssueState":
         value = dict(value)
         value["phase"] = Phase(value.get("phase", "discovered"))
+        # State version 1 predates cleanup metadata and only had pane_id.
+        value.setdefault("owned_panes", [])
+        value.setdefault("cleanup_status", "cleaned" if value["phase"] is Phase.CLEANED else "pending")
+        value.setdefault("cleanup_error", None)
+        value.setdefault("cleanup_completed_at", None)
         return cls(**value)
 
 

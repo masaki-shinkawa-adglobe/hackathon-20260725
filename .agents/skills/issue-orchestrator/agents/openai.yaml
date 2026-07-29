@@ -1,4 +1,4 @@
 interface:
-  display_name: "Issue Controller Guide"
-  short_description: "Guide deterministic Controller issue delivery"
-  default_prompt: "Use $issue-orchestrator to show the safe issue-controller command for my requested Issue work."
+  display_name: "Issue Controller Front Door"
+  short_description: "自然言語でIssue Controllerの配送を実行"
+  default_prompt: "Use $issue-orchestrator to implement GitHub Issue 12. First run doctor and status, then start it with the default publish behavior."

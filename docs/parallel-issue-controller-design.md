@@ -17,6 +17,7 @@ Pull Requestには1件以上のcommitを含められる。通常はpublish前の
 
 ## 2. 設計原則
 
+- Codex上の`$issue-orchestrator`を唯一の自然言語フロントドアとし、ユーザーはController CLIを直接起動しない。Skillはインストール済み`issue-controller` console commandだけを呼び出す。
 - `.git`とlinked worktreeのGit管理領域を書き込めるのはControllerだけとする。
 - LLMは権限を持たないPlannerとし、Issueの優先順位、依存関係、実装順序を構造化データで提案する。
 - ControllerはLLMではなく、固定された検証とコマンドだけを実行する決定的なPythonプロセスとする。
@@ -29,6 +30,7 @@ Pull Requestには1件以上のcommitを含められる。通常はpublish前の
 - mergeは人による実行時承認、または独立LLM reviewerの`risk:low`判定と決定的な低リスクpolicyの両方がある場合だけ実行する。
 - 復旧できない可能性があるときは削除せず、状態と作業内容を保全する。
 - 共通Git管理領域を変更するController処理は直列化する。
+- フロントドアは状態変更前に必ず`doctor`と`status`を実行する。commandが未installならfail-closedとし、セットアップを一度だけ案内して自動install・update・version検査は行わない。
 
 ## 3. 対象範囲
 
@@ -51,7 +53,7 @@ Pull Requestには1件以上のcommitを含められる。通常はpublish前の
 - 人の明示承認によるmerge
 - 独立reviewerの低リスク判定と決定的policyを満たすPRのauto-merge
 - Controller再起動後の再検出と再開
-- 明示操作による安全なcleanup
+- merge後のController所有local resourceの自動cleanupと、明示操作による安全なcleanup
 
 ### 3.2 初期実装の対象外
 
@@ -69,8 +71,9 @@ Pull Requestには1件以上のcommitを含められる。通常はpublish前の
 
 ```mermaid
 flowchart LR
-    U[User] -->|start/status/resume/merge/cleanup| C[Trusted Controller]
-    U -->|Issueで回答 / merge承認| GH[GitHub]
+    U[User] -->|自然言語の配送依頼| F[Codex $issue-orchestrator]
+    F -->|issue-controller console command| C[Trusted Controller]
+    U -->|Issueで要件回答| GH[GitHub]
     C -->|sanitized candidate data| P[Read-only LLM Planner]
     P -->|untrusted plan JSON| C
     C --> S[(Atomic State Store)]
@@ -105,11 +108,12 @@ ControllerはPlannerの計画、Issue本文、workerの報告、reviewerの指�
 
 | 担当 | 判断・作業 | 人へ戻す条件 |
 |---|---|---|
-| 人 | 実行開始、Issueへの要件回答、risk引き上げ、通常merge、cleanup | 中・高リスクmerge、重大な曖昧さ、安全規則の例外 |
+| 人 | 自然言語での実行開始、Issueへの要件回答、risk引き上げ、明示merge、明示cleanup | 中・高リスクmerge、重大な曖昧さ、安全規則の例外 |
+| `$issue-orchestrator` | `doctor`/`status`確認後のController command実行と結果要約 | Git/GitHub/Herdr/worktree/paneの直接操作、MCP・別APIの追加 |
 | LLM Planner | 優先順位、依存関係、並列batch、要件明確性の提案 | 実装結果が大きく変わる未確定事項 |
 | LLM worker | 1 Issueの実装、worktree内テスト | product要件の重大な曖昧さ、外部調整 |
 | LLM reviewer | 独立レビュー、修正点の提示 | 安全に判定不能なreview blocker |
-| Python Controller | 計画検証、状態、Git、Herdr、policy、commit、許可済みGitHub操作 | policy違反、競合、base更新、明示承認待ち |
+| Python Controller | 計画検証、状態、Git、Herdr、policy、commit、許可済みGitHub操作、merge後local cleanup | policy違反、競合、base更新、明示承認待ち |
 
 人は通常の実装方法を逐次判断しない。LLMは日常的な実装選択を既存コードと規約から解決し、公開仕様や安全性を左右する不明点だけをIssueへ戻す。
 
@@ -155,8 +159,8 @@ docs/
 
 - Controller packageはworker worktreeの外にある専用virtual environmentへinstallする。
 - `.py`は`0644`とし、shebangと実行ビットを付けない。
-- 信頼済みユーザーは worktree 外の専用 virtual environment に、通常の（editable ではない）install を行う。
-  ` <venv>/bin/python -m pip install --no-deps --no-build-isolation <repository-path>` の後、`<venv>/bin/python -I -m issue_controller ...`として起動する。
+- 管理者はworktree外の専用virtual environmentへ通常の（editableではない）installを行い、`issue-controller` console commandを提供する。
+  フロントドアはこのcommandだけを実行し、Python moduleを直接起動しない。
 - package の配布名は`issue-controller`、import 名は`issue_controller`とする。`tools/issue_controller`はソース配置であり、起動時の module path として使わない。
 - ControllerはIssue worktree内のPython moduleをimport・実行しない。
 - setuid、`sudo`、常駐daemon、HTTP API、workerから到達可能なUnix socketを使用しない。
@@ -233,7 +237,7 @@ issue-controller cleanup --issue 12
 | `merge` | remote tracking ref更新 | 明示されたPRのmerge |
 | `cleanup` | worktreeとlocal branch削除 | なし |
 
-`start`はデフォルトで、実装・検証・local commit・push・PR作成まで進める。途中の人によるpublish承認は要求しない。外部変更を行わないdry-runでは`--no-publish`を指定する。`publish`は`--no-publish`で保留したrunまたは一時的に失敗したpublishの明示的な再試行に使用する。mergeは引き続き別のpolicy gateとする。
+`start`はデフォルトで、実装・検証・local commit・push・PR作成まで進める。途中の人によるpublish承認は要求しない。外部変更を行わないdry-runでは`--no-publish`を指定する。`publish`は`--no-publish`で保留したrunまたは一時的に失敗したpublishの明示的な再試行に使用する。mergeは引き続き別のpolicy gateとし、フロントドアからは明示的なmerge依頼時だけ実行する（低リスクauto-mergeは`start`の許可範囲に含む）。
 
 `plan`ではControllerが候補Issueを取得し、sandboxed Plannerへ入力する。Plannerは計画JSONだけを返し、Controllerのコマンドを実行しない。`start`は検証済み計画または明示されたIssue番号だけを受理する。
 
@@ -380,6 +384,9 @@ stateDiagram-v2
     merge_evaluation --> done: validated low-risk auto-merge
     merge_evaluation --> awaiting_merge_approval: manual gate
     awaiting_merge_approval --> done: human-approved merge
+    done --> cleanup_pending: owned local resources remain
+    cleanup_pending --> cleaned: cleanup success
+    cleanup_pending --> cleanup_warning: cleanup failure
     discovered --> blocked
     planning --> blocked
     preparing --> blocked
@@ -392,7 +399,7 @@ stateDiagram-v2
     awaiting_merge_approval --> blocked
 ```
 
-`awaiting_input`はIssue上の回答待ち、`merge_evaluation`は事前認可と低リスクpolicyの判定中、`awaiting_merge_approval`は人によるmerge判断待ちである。`failed`は再試行可能な内部障害、`blocked`は回答以外の人または外部状態の変更が必要な状態として区別する。
+`awaiting_input`はIssue上の回答待ち、`merge_evaluation`は事前認可と低リスクpolicyの判定中、`awaiting_merge_approval`は人によるmerge判断待ちである。`done`は配送成功を表し、`cleanup_pending`、`cleaned`、`cleanup_warning`はそれと独立したlocal cleanup状態である。`failed`は再試行可能な内部障害、`blocked`は回答以外の人または外部状態の変更が必要な状態として区別する。
 
 ### 9.2 永続状態
 
@@ -520,15 +527,17 @@ Controllerは次を再検証する。
 
 Plannerが返したbranch、path、コマンド、permission、publish指定はschema違反として拒否する。最終的なbranch、worktree、pane、実行順序はControllerが再計算する。
 
-### 11.3 現行Skillの再編
+### 11.3 SkillとLLMフロントドア
 
 | 現行Skill | 変更後 |
 |---|---|
-| `issue-orchestrator` | `issue-planner`へ縮小し、計画JSONだけを返す |
+| `issue-orchestrator` | Codex上の唯一の自然言語フロントドア。`issue-controller` console commandだけを実行し、結果を要約する |
 | `issue-implementer` | 実装とworktree内テストだけを担当し、Git/GitHub操作を削除 |
 | `issue-reviewer` | read-only reviewだけを担当し、comment・merge権限を削除 |
 
-通常の起点はユーザーが実行する`issue-controller start`とする。Controllerが低権限の`issue-planner`を起動するため、Plannerが特権Controllerを呼び出す向きにはしない。
+通常の起点はユーザーの自然言語依頼であり、`$issue-orchestrator`が`doctor`、`status`、必要なController commandを順に実行する。「Issue 12を実装して」は承認を兼ね、`start --issue 12`を追加確認なしで実行する。dry-runだけは`--no-publish`を付け、「全部」「残り全部」が明示された時だけ`start --auto`を使う。対象が曖昧ならIssue番号を確認する。Controllerが低権限の`issue-planner`を起動するため、Plannerが特権Controllerを呼び出す向きにはしない。
+
+`awaiting_input`ではフロントドアは質問を要約して停止し、回答を推測・投稿しない。ユーザーが「回答したので続けて」と依頼した場合にだけ`resume`する。mergeとcleanupは明示語がある場合だけ実行するが、`status`がmerge済みかつcleanup pendingを検知した場合は追加確認なしでcleanupする。
 
 ### 11.4 要件明確性ゲート
 
@@ -882,7 +891,7 @@ Controller起動時に次を突き合わせる。
 
 ## 19. cleanup
 
-cleanupは自動実行しない。`cleanup --issue <number>`で次をすべて検査する。
+merge済みIssueでは、Controllerが検知後に所有確認済みlocal resourceのcleanupを自動実行する。その他では、明示された`cleanup --issue <number>`で次をすべて検査する。フロントドアはmerge済みかつcleanup pendingを`status`で検知した場合に限り、追加確認なしでこのcleanupを再開する。
 
 1. 対象がController作成resourceである
 2. agentが停止済み
@@ -892,6 +901,8 @@ cleanupは自動実行しない。`cleanup --issue <number>`で次をすべて�
 6. canonical worktree pathと一致
 7. local branch削除条件を満たす
 
+remote branchはcleanup対象ではなく、削除しない。
+
 処理順:
 
 1. agent停止
@@ -899,9 +910,9 @@ cleanupは自動実行しない。`cleanup --issue <number>`で次をすべて�
 3. 所有paneをclose
 4. `git worktree remove`をforceなしで実行
 5. worktree削除成功後だけlocal branchを削除
-6. 状態を`cleaned`に更新
+6. 配送結果とは独立したcleanup状態を`cleaned`に更新
 
-失敗したresourceは保持し、手動cleanup候補として絶対パスを表示する。
+失敗したresourceは保持し、配送が成功済みならその成功状態を維持したまま`cleanup_warning`を記録する。フロントドアはIssue、phase、PR、tests、blocker、cleanupだけを要約し、raw logやtranscriptを返さない。
 
 ## 20. ログ
 
@@ -1042,7 +1053,7 @@ cleanupは自動実行しない。`cleanup --issue <number>`で次をすべて�
 14. 要確認Issueではworktreeを作らず、確認コメントを1件だけ投稿する
 15. 許可された回答後の`resume`で実装を開始する
 16. 未承認、CI失敗、head SHA不一致ではmergeしない
-17. GitHub UIでのmergeを検出して`done`へ遷移する
+17. GitHub UIでのmergeを検出して配送成功へ遷移し、merge後local cleanupを開始する
 18. 同じ行数でも認証・workflow・dependency変更はauto-mergeしない
 19. LLM reviewerの`risk:low`だけではauto-mergeしない
 20. `risk:low`、低リスクpath、CI、review、head SHAがそろった場合だけauto-mergeする
@@ -1061,7 +1072,7 @@ cleanupは自動実行しない。`cleanup --issue <number>`で次をすべて�
 - 要確認がなければIssueラベル、コメント、push、PR作成は行わない。
 - 要確認のテストIssueでは定型コメントと`status:needs-input`だけを許可する。
 - worktree、pane、ログ、状態、commitをIssue単位で確認する。
-- cleanup候補を表示するが自動削除しない。
+- dry-run中の未公開resourceはcleanupせず保持する。merge済みresourceのlocal cleanupは所有確認後に自動実行する。
 
 ## 24. 実装方針の確定事項
 

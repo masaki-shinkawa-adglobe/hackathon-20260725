@@ -25,10 +25,10 @@ SHA_B = "b" * 40
 
 class _FakeGit:
   def __init__(self, repo):
-    self.repo=repo;self.records={};self.calls=[];self.dirty=False;self.head_value=SHA_B
+    self.repo=repo;self.records={};self.calls=[];self.dirty=False;self.head_value=SHA_B;self.branches={}
   def fetch_base(self, base): self.calls.append(("fetch",base));return SHA_A
   def add_worktree(self,path,branch,base):
-    path.mkdir(parents=True);number=path.name.removeprefix("issue-");(path/"docs").mkdir();(path/"docs"/f"{number}.md").write_text(number);self.records[path.resolve()]=branch;self.calls.append(("add",branch))
+    path.mkdir(parents=True);number=path.name.removeprefix("issue-");(path/"docs").mkdir();(path/"docs"/f"{number}.md").write_text(number);self.records[path.resolve()]=branch;self.branches[branch]=SHA_B;self.calls.append(("add",branch))
   def worktrees(self): return [WorktreeRecord(path, SHA_B, branch) for path,branch in self.records.items()]
   def current_branch(self,cwd): return self.records[cwd.resolve()]
   def changes(self,cwd): return [Change(f"docs/{cwd.name}.md","?","?")]
@@ -39,13 +39,24 @@ class _FakeGit:
   def is_clean(self,cwd): return not self.dirty
   def head(self,cwd): return self.head_value
   def push(self,branch,base): self.calls.append(("push",branch,base))
+  def branch_exists(self,branch): return branch in self.branches
+  def branch_head(self,branch): return self.branches[branch]
+  def remove_worktree(self,path):
+    self.calls.append(("remove_worktree",path.name));self.records.pop(path.resolve());
+    for child in sorted(path.rglob("*"),reverse=True):
+      if child.is_file(): child.unlink()
+      elif child.is_dir(): child.rmdir()
+    path.rmdir()
+  def delete_branch(self,branch,*,force=False): self.calls.append(("delete_branch",branch,force));self.branches.pop(branch)
   def committed_changes(self,base,head): return [Change("README.md","M"," ")]
   def committed_numstat(self,base,head): return (1,False)
   def unsafe_tree_paths(self,head,paths): return (False,False)
 
 
 class _FakeGitleaks:
+  def __init__(self): self.cleaned=[]
   def scan(self,*args): return ScanResult(True,False,0)
+  def cleanup(self,*args): self.cleaned.append(args)
 
 
 class _FakeAgents:
@@ -80,8 +91,21 @@ class ControllerTests(unittest.TestCase):
     class TestController(Controller):
       def doctor(self): return []
     controller=TestController(repo,ControllerConfig(max_parallel=2))
-    controller.git=_FakeGit(repo);controller.gitleaks=_FakeGitleaks();controller.agents=_FakeAgents();controller.gh=_FakeGh();controller.herdr=type("Herdr",(),{"close_pane":lambda self,pane:None})()
+    controller.git=_FakeGit(repo);controller.gitleaks=_FakeGitleaks();controller.agents=_FakeAgents();controller.gh=_FakeGh()
+    class Herdr:
+      def __init__(self): self.closed=[];self.pane_data=[]
+      def panes(self): return self.pane_data
+      def close_pane(self,pane): self.closed.append(pane)
+    controller.herdr=Herdr()
     return controller
+
+  def _merged_item(self, controller, directory, *, phase=Phase.AWAITING_MERGE_APPROVAL):
+    path=worktree_path(controller.repo,1);branch="issue/1-issue-1"
+    controller.git.add_worktree(path,branch,SHA_A)
+    item=IssueState(1,branch=branch,worktree=str(path),phase=phase,base_sha=SHA_A,commit_sha=SHA_B,pr_url="https://example/pr/1",owned_panes=["worker-pane","review-pane","risk-pane"],secret_scan_container_name="scan",secret_scan_cidfile="cid")
+    controller.gh.pr_data[item.pr_url]={"state":"MERGED","headRefOid":SHA_B,"headRefName":branch,"baseRefName":"main","isDraft":False,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}],"reviews":[]}
+    controller.herdr.pane_data=[{"pane_id":pane,"agent_status":"idle"} for pane in item.owned_panes]
+    return item
 
   def test_start_launches_batch_before_collect_and_commits_without_publish(self):
     with tempfile.TemporaryDirectory() as d:
@@ -148,7 +172,7 @@ class ControllerTests(unittest.TestCase):
       item=IssueState(1,branch="issue/1-issue-1",worktree=str(path),phase=Phase.PUBLISHED,base_sha=SHA_A,commit_sha=SHA_B,pr_url="https://example/pr/1",reviewer_result={"verdict":"OK","findings":[]},worker_result={"remaining_work":[]})
       state=ControllerState(run_id="run-1",issues={"1":item})
       controller.gh.pr_data[item.pr_url]={"state":"OPEN","headRefOid":SHA_B,"headRefName":item.branch,"labels":[],"isDraft":False,"mergeable":"MERGEABLE","statusCheckRollup":[],"reviews":[]}
-      controller._risk_review=lambda _item:{"verdict":"OK","risk":"low","head_sha":SHA_B,"reasons":[]}
+      controller._risk_review=lambda *_:{"verdict":"OK","risk":"low","head_sha":SHA_B,"reasons":[]}
       controller._evaluate_merge(state,item)
       self.assertEqual(item.phase,Phase.AWAITING_MERGE_APPROVAL);self.assertFalse(controller.gh.merges)
       self.assertTrue(controller.gh.labels)
@@ -165,6 +189,119 @@ class ControllerTests(unittest.TestCase):
       controller.gh.pr_data[item.pr_url]={"headRefOid":SHA_A,"headRefName":item.branch,"baseRefName":"main","state":"OPEN","isDraft":False,"mergeable":"MERGEABLE","statusCheckRollup":[{"conclusion":"SUCCESS"}],"reviews":[]}
       with self.assertRaises(RuntimeError): controller.merge(1,SHA_B)
       self.assertFalse(controller.gh.merges)
+
+  def test_explicit_merge_cleans_only_owned_local_resources_and_stays_done(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item=self._merged_item(controller,d)
+      controller.gh.pr_data[item.pr_url]["state"]="OPEN"
+      controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      result=controller.merge(1,SHA_B)
+      self.assertEqual(result["phase"],"done");self.assertEqual(result["cleanup_status"],"cleaned")
+      self.assertFalse(Path(item.worktree).exists());self.assertNotIn(item.branch,controller.git.branches)
+      self.assertEqual(set(controller.herdr.closed),set(item.owned_panes));self.assertEqual(len(controller.gitleaks.cleaned),1)
+      self.assertFalse(any(call[0]=="push" for call in controller.git.calls))
+
+  def test_auto_merge_success_cleans_resources_without_remote_branch_operation(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item=self._merged_item(controller,d,phase=Phase.PUBLISHED)
+      controller.gh.pr_data[item.pr_url]["state"]="OPEN";controller._risk_review=lambda *_:{"verdict":"OK","risk":"low","head_sha":SHA_B,"reasons":[]}
+      state=ControllerState(run_id="run-1",issues={"1":item});controller._evaluate_merge(state,item)
+      self.assertEqual(item.phase,Phase.DONE);self.assertEqual(item.cleanup_status,"cleaned")
+      self.assertFalse(Path(item.worktree).exists());self.assertNotIn(item.branch,controller.git.branches)
+      self.assertFalse(any(call[0]=="push" for call in controller.git.calls))
+
+  def test_cleanup_warning_keeps_dirty_worktree_and_branch_after_merge(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item=self._merged_item(controller,d,phase=Phase.DONE);controller.git.dirty=True
+      controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      result=controller.cleanup(1)
+      self.assertEqual(result["phase"],"done");self.assertEqual(result["cleanup_status"],"warning")
+      self.assertIn("worktree is not clean",result["cleanup_error"])
+      self.assertTrue(Path(item.worktree).exists());self.assertIn(item.branch,controller.git.branches)
+
+  def test_manual_cleanup_retains_legacy_published_cleanup_with_nonforce_branch_delete(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item=self._merged_item(controller,d,phase=Phase.PUBLISHED)
+      controller.gh.pr_data[item.pr_url]["state"]="OPEN";controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      result=controller.cleanup(1)
+      self.assertEqual(result["phase"],"cleaned");self.assertEqual(result["cleanup_status"],"cleaned")
+      self.assertFalse(Path(item.worktree).exists());self.assertIn(("delete_branch",item.branch,False),controller.git.calls)
+
+  def test_manual_cleanup_preserves_unpublished_commit(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);path=worktree_path(controller.repo,1);branch="issue/1-issue-1";controller.git.add_worktree(path,branch,SHA_A)
+      item=IssueState(1,branch=branch,worktree=str(path),phase=Phase.COMMITTED,commit_sha=SHA_B)
+      controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      with self.assertRaisesRegex(RuntimeError,"unpublished commit"):
+        controller.cleanup(1)
+      self.assertTrue(path.exists());self.assertIn(branch,controller.git.branches)
+
+  def test_cleanup_warning_keeps_resources_when_worktree_removal_fails(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item=self._merged_item(controller,d,phase=Phase.DONE)
+      controller.git.remove_worktree=lambda _path: (_ for _ in ()).throw(RuntimeError("remove failed"))
+      controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      result=controller.cleanup(1)
+      self.assertEqual(result["phase"],"done");self.assertEqual(result["cleanup_status"],"warning")
+      self.assertIn("worktree cleanup failed",result["cleanup_error"])
+      self.assertTrue(Path(item.worktree).exists());self.assertIn(item.branch,controller.git.branches)
+
+  def test_done_cleanup_turns_merge_verification_failure_into_warning(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item=self._merged_item(controller,d,phase=Phase.DONE)
+      controller.gh.pr=lambda _url: (_ for _ in ()).throw(RuntimeError("GitHub unavailable"))
+      controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      result=controller.cleanup(1)
+      self.assertEqual(result["phase"],"done");self.assertEqual(result["cleanup_status"],"warning")
+      self.assertIn("merge verification failed",result["cleanup_error"])
+      self.assertTrue(Path(item.worktree).exists());self.assertIn(item.branch,controller.git.branches)
+
+  def test_cleanup_does_not_close_working_or_unowned_panes(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item=self._merged_item(controller,d,phase=Phase.DONE)
+      controller.herdr.pane_data=[{"pane_id":"worker-pane","agent_status":"working"},{"pane_id":"unowned-pane","agent_status":"idle"}]
+      controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      result=controller.cleanup(1)
+      self.assertEqual(result["cleanup_status"],"warning");self.assertIn("still working",result["cleanup_error"])
+      self.assertNotIn("worker-pane",controller.herdr.closed);self.assertNotIn("unowned-pane",controller.herdr.closed)
+      self.assertTrue(Path(item.worktree).exists());self.assertIn(item.branch,controller.git.branches)
+
+  def test_status_detects_external_merge_but_leaves_cleanup_pending(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item=self._merged_item(controller,d,phase=Phase.PUBLISHED)
+      controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      result=controller.status(1)
+      self.assertEqual(result["phase"],"done");self.assertEqual(result["cleanup_status"],"pending")
+      self.assertTrue(Path(item.worktree).exists());self.assertIn(item.branch,controller.git.branches)
+      self.assertFalse(controller.herdr.closed);self.assertFalse(controller.gitleaks.cleaned)
+
+  def test_resume_detects_existing_merge_and_cleans_up(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item=self._merged_item(controller,d,phase=Phase.PUBLISHED)
+      controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      result=controller.resume(1)
+      self.assertEqual(result["issues"]["1"]["phase"],"done");self.assertEqual(result["issues"]["1"]["cleanup_status"],"cleaned")
+      self.assertFalse(Path(item.worktree).exists());self.assertNotIn(item.branch,controller.git.branches)
+
+  def test_worker_reviewer_and_risk_panes_are_recorded_as_owned(self):
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);controller.agents.planner_result={"schema_version":1,"batches":[{"issues":[1],"reason":"independent"}],"dependencies":[],"clarifications":[],"warnings":[]};state=controller.start([1],no_publish=True)
+      persisted=controller.store.load();item=persisted.issues["1"]
+      self.assertTrue(any("worker" in pane for pane in item.owned_panes));self.assertTrue(any("review" in pane for pane in item.owned_panes))
+      controller.agents.collect=lambda **_:type("Run",(),{"result":{"verdict":"OK","risk":"low","head_sha":SHA_B,"reasons":[]},"ended_at":"now"})()
+      controller._risk_review(persisted,item)
+      self.assertTrue(any("risk" in pane for pane in item.owned_panes));self.assertTrue(any("risk" in pane for pane in controller.store.load().issues["1"].owned_panes));self.assertEqual(state["issues"]["1"]["phase"],"committed")
+
+  def test_legacy_state_fields_and_cleaned_phase_remain_readable(self):
+    value={"issue_number":1,"phase":"cleaned","pane_id":"legacy-pane"}
+    item=IssueState.from_dict(value)
+    self.assertEqual(item.phase,Phase.CLEANED);self.assertEqual(item.owned_panes,[]);self.assertEqual(item.cleanup_status,"cleaned")
+    with tempfile.TemporaryDirectory() as d:
+      controller=self._controller_with_fakes(d);item.branch="issue/1-issue-1";item.pr_url="https://example/pr/1";item.commit_sha=SHA_B
+      controller.gh.pr_data[item.pr_url]={"state":"MERGED","headRefOid":SHA_B,"headRefName":item.branch}
+      controller.store.save(ControllerState(run_id="run-1",issues={"1":item}))
+      result=controller.cleanup(1)
+      self.assertEqual(result["phase"],"done");self.assertEqual(result["cleanup_status"],"cleaned")
   def test_agent_profile_argv_uses_builtin_profiles_only(self):
     class FakeHerdr:
       def split(self, cwd): self.cwd=cwd; return "opaque-pane"
@@ -261,6 +398,24 @@ class ControllerTests(unittest.TestCase):
       lock=Path(d)/"lock";lock.write_text("example/gitleaks@sha256:"+"a"*64)
       r=Capture();g=GitleaksDocker("docker",lock,Path(d),r);g.scan("secret", "run-1", 2, 3)
       self.assertIn("--rm",r.argv);self.assertIn("--network=none",r.argv);self.assertIn("--read-only",r.argv);self.assertIn("--cap-drop=ALL",r.argv);self.assertIn("--security-opt=no-new-privileges",r.argv);self.assertIn("--cidfile",r.argv);self.assertEqual(r.kwargs["input_text"],"secret")
+  def test_gitleaks_cleanup_requires_matching_labels_before_removal(self):
+    class Capture(ProcessRunner):
+      def __init__(self, labels): self.labels=labels;self.argv=[]
+      def run(self,argv,**kwargs):
+        self.argv.append(list(argv))
+        if argv[1:3]==["container","inspect"]:
+          return type("R",(),{"returncode":0,"stdout":json.dumps(self.labels),"stderr":""})()
+        return type("R",(),{"returncode":0,"stdout":"","stderr":""})()
+    with tempfile.TemporaryDirectory() as d:
+      lock=Path(d)/"lock";lock.write_text("example/gitleaks@sha256:"+"a"*64);root=Path(d)/"state"
+      good=Capture({"io.issue-controller.run":"run-1","io.issue-controller.issue":"2"});g=GitleaksDocker("docker",lock,root,good)
+      cid=g.cidfile("run-1",2,1);cid.parent.mkdir();cid.write_text("opaque")
+      g.cleanup("run-1",2,1,g.name("run-1",2,1),str(cid))
+      self.assertFalse(cid.exists());self.assertTrue(any(argv[1:4]==["container","rm","--force"] for argv in good.argv))
+      bad=Capture({"io.issue-controller.run":"other","io.issue-controller.issue":"2"});bad_g=GitleaksDocker("docker",lock,root,bad)
+      with self.assertRaisesRegex(RuntimeError,"ownership mismatch"):
+        bad_g.cleanup("run-1",2,1,bad_g.name("run-1",2,1),None)
+      self.assertFalse(any(argv[1:4]==["container","rm","--force"] for argv in bad.argv))
   def test_legacy_sandbox_config_is_rejected(self):
     with tempfile.TemporaryDirectory() as d:
       path=Path(d)/"config.toml"

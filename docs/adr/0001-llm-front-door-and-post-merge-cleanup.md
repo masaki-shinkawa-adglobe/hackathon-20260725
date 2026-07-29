@@ -1,0 +1,3 @@
+# LLMフロントドアとmerge後cleanup
+
+Codex上の`$issue-orchestrator`をIssue配送の唯一の自然言語フロントドアとし、インストール済み`issue-controller` console commandだけへ委譲する。これにより、LLMはGit、GitHub、Herdr、worktreeを直接操作せず、決定的なControllerに権限を閉じ込める。MCPや直接Git操作は同じ境界を迂回するため採用しない。merge後はControllerが所有確認済みのlocal resourceをcleanupするが、復旧・監査のためremote branchは削除しない。

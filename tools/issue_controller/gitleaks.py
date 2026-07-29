@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import json
 
 from .process_runner import ProcessResult, ProcessRunner
 from .validation import issue_number, safe_name
@@ -69,6 +70,54 @@ class GitleaksDocker:
             "gitleaks container name",
         )
 
+    def cidfile(self, run_id: str, issue: int, attempt: int) -> Path:
+        # Keep this derivation in one place so cleanup cannot be redirected by
+        # a state file to an arbitrary local file.
+        self.name(run_id, issue, attempt)
+        return self.state_root / f"gitleaks-{run_id}-{issue}-{attempt}.cid"
+
+    def cleanup(
+        self,
+        run_id: str,
+        issue: int,
+        attempt: int,
+        container_name: str | None,
+        cidfile_value: str | None,
+    ) -> None:
+        """Remove only a verifiably controller-owned leftover scan artifact."""
+        expected_name = self.name(run_id, issue, attempt)
+        expected_cidfile = self.cidfile(run_id, issue, attempt).resolve()
+        if container_name not in {None, expected_name}:
+            raise RuntimeError("gitleaks container ownership mismatch")
+        if cidfile_value is not None and Path(cidfile_value).resolve() != expected_cidfile:
+            raise RuntimeError("gitleaks cidfile ownership mismatch")
+        inspected = self.runner.run(
+            [
+                self.docker, "container", "inspect", "--format",
+                "{{json .Config.Labels}}", expected_name,
+            ]
+        )
+        if inspected.returncode:
+            # A cidfile alone is not proof of ownership, so preserve one for
+            # manual recovery rather than deleting it.
+            if expected_cidfile.exists():
+                raise RuntimeError("unverified gitleaks cidfile remains")
+            return
+        try:
+            labels = json.loads(inspected.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("invalid gitleaks container labels") from exc
+        if not isinstance(labels, dict) or labels.get("io.issue-controller.run") != run_id or labels.get("io.issue-controller.issue") != str(issue):
+            raise RuntimeError("gitleaks container ownership mismatch")
+        removed = self.runner.run([self.docker, "container", "rm", "--force", expected_name])
+        if removed.returncode:
+            raise RuntimeError("unable to remove owned gitleaks container")
+        # A verified container makes its cidfile safe to remove.
+        try:
+            expected_cidfile.unlink(missing_ok=True)
+        except OSError as exc:
+            raise RuntimeError("unable to remove owned gitleaks cidfile") from exc
+
     def scan(
         self,
         diff: str,
@@ -78,7 +127,7 @@ class GitleaksDocker:
         config: Path | None = None,
     ) -> ScanResult:
         name = self.name(run_id, issue, attempt)
-        cidfile = self.state_root / f"gitleaks-{run_id}-{issue}-{attempt}.cid"
+        cidfile = self.cidfile(run_id, issue, attempt)
         self.state_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         if cidfile.exists():
             raise RuntimeError("gitleaks cidfile already exists")

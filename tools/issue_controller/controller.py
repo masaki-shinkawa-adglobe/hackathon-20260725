@@ -166,6 +166,11 @@ class Controller:
             state = self.store.load()
             if state.issues:
                 reconcile(state, self.git)
+                # This is deliberately detection only.  A merge performed in
+                # the GitHub UI is surfaced as cleanup pending, never cleaned
+                # up as a side effect of a read-only status command.
+                for item in state.issues.values():
+                    self._reconcile_pr(item)
                 self.store.save(state)
             if number is None:
                 return state.to_dict()
@@ -269,6 +274,8 @@ class Controller:
                     Phase.AWAITING_MERGE_APPROVAL,
                 }:
                     self._evaluate_merge(state, item)
+                if item.phase is Phase.DONE and item.cleanup_status != "cleaned":
+                    self._cleanup_after_merge(state, item, merge_confirmed=False)
                 self.store.save(state)
             return state.to_dict()
 
@@ -276,32 +283,34 @@ class Controller:
         with self.store.lock():
             state = self.store.load()
             item = self._item(state, number)
-            worktree = Path(item.worktree).resolve(strict=True)
-            expected = worktree_path(self.repo, item.issue_number)
-            if worktree != expected.resolve() or not self.git.is_clean(worktree):
-                raise RuntimeError("worktree is not a clean owned resource")
             if item.phase not in {
                 Phase.COMMITTED,
                 Phase.PUBLISHED,
                 Phase.DONE,
                 Phase.BLOCKED,
+                Phase.CLEANED,
             }:
                 raise RuntimeError("Issue is not eligible for cleanup")
-            if item.phase is Phase.COMMITTED and not item.pr_url:
-                raise RuntimeError("unpublished commit must be preserved")
-            if item.pane_id:
-                panes = {
-                    str(pane.get("pane_id")): pane for pane in self.herdr.panes()
-                }
-                pane = panes.get(item.pane_id)
-                if pane and pane.get("agent_status") == "working":
-                    raise RuntimeError("owned agent is still running")
-                if pane:
-                    self.herdr.close_pane(item.pane_id)
-            self.git.remove_worktree(worktree)
-            self.git.delete_branch(item.branch)
-            item.phase = Phase.CLEANED
-            item.ended_at = self._now()
+            # DONE is already a successful delivery. Its cleanup helper turns
+            # a GitHub verification outage into a warning rather than making
+            # the CLI fail. Legacy explicit cleanup remains available when a
+            # published/blocked PR cannot be queried.
+            if item.phase in {Phase.DONE, Phase.CLEANED}:
+                merged = False
+            else:
+                try:
+                    merged = self._merge_is_confirmed(item)
+                except RuntimeError:
+                    merged = False
+            if merged and item.phase is not Phase.DONE and item.phase is not Phase.CLEANED:
+                item.phase = Phase.DONE
+                item.ended_at = item.ended_at or self._now()
+            if item.phase in {Phase.DONE, Phase.CLEANED} or merged:
+                self._cleanup_after_merge(state, item, merge_confirmed=merged)
+            else:
+                if item.phase is Phase.COMMITTED and not item.pr_url:
+                    raise RuntimeError("unpublished commit must be preserved")
+                self._manual_cleanup_unmerged(item)
             self.store.save(state)
             return item.to_dict()
 
@@ -337,6 +346,7 @@ class Controller:
             item.phase = Phase.DONE
             item.ended_at = self._now()
             item.last_error = None
+            self._cleanup_after_merge(state, item, merge_confirmed=True)
             self.store.save(state)
             return item.to_dict()
 
@@ -455,6 +465,7 @@ class Controller:
             prompt=prompt,
         )
         item.pane_id = pane_id
+        self._record_pane(item, pane_id)
         item.phase = Phase.RUNNING
         item.started_at = started_at
         return time.monotonic()
@@ -539,6 +550,7 @@ class Controller:
         item.phase = Phase.VALIDATING
         item.changed_paths = actual_paths
         diff = self.git.diff_for_scan(worktree)
+        self._record_gitleaks_artifact(state, item)
         scan = self.gitleaks.scan(
             diff,
             state.run_id,
@@ -569,12 +581,13 @@ class Controller:
             )
             if result.returncode:
                 raise RuntimeError("blocked:test-failed")
-        self._review(item, issue)
+        self._review(state, item, issue)
         if (item.reviewer_result or {}).get("verdict") != "OK":
             raise RuntimeError("blocked:review")
         item.phase = Phase.READY_TO_COMMIT
         self.git.stage(worktree)
         staged = self.git.staged_diff_for_scan(worktree)
+        self._record_gitleaks_artifact(state, item)
         staged_scan = self.gitleaks.scan(
             staged,
             state.run_id,
@@ -593,7 +606,12 @@ class Controller:
         item.phase = Phase.COMMITTED
         item.last_error = None
 
-    def _review(self, item: IssueState, issue: dict[str, Any]) -> None:
+    def _review(
+        self,
+        state: ControllerState,
+        item: IssueState,
+        issue: dict[str, Any],
+    ) -> None:
         item.phase = Phase.REVIEWING
         name = f"issue-{item.issue_number}-review-{item.attempt}"
         prompt = self._prompt("reviewer.md").replace(
@@ -601,7 +619,7 @@ class Controller:
             issue_payload(issue),
         )
         started = time.monotonic()
-        _pane, _started_at = self.agents.start(
+        pane, _started_at = self.agents.start(
             cwd=Path(item.worktree),
             name=name,
             model=self.config.reviewer_model,
@@ -609,6 +627,8 @@ class Controller:
             permission_profile="read-only",
             prompt=prompt,
         )
+        self._record_pane(item, pane)
+        self.store.save(state)
         run = self.agents.collect(
             name=name,
             timeout_seconds=self.config.reviewer_timeout,
@@ -832,6 +852,7 @@ class Controller:
             item.phase = Phase.DONE
             item.ended_at = self._now()
             item.last_error = None
+            self._cleanup_after_merge(state, item, merge_confirmed=False)
             return
         if (
             pr.get("headRefOid") != item.commit_sha
@@ -847,7 +868,7 @@ class Controller:
         }
         human_elevated = bool(labels & {"risk:medium", "risk:high"})
         previous_risk = item.risk
-        risk_result = self._risk_review(item)
+        risk_result = self._risk_review(state, item)
         item.risk = risk_result["risk"]
         item.risk_head_sha = risk_result["head_sha"]
         changes = self.git.committed_changes(item.base_sha, item.commit_sha)
@@ -906,8 +927,13 @@ class Controller:
         item.phase = Phase.DONE
         item.ended_at = self._now()
         item.last_error = None
+        self._cleanup_after_merge(state, item, merge_confirmed=True)
 
-    def _risk_review(self, item: IssueState) -> dict[str, Any]:
+    def _risk_review(
+        self,
+        state: ControllerState,
+        item: IssueState,
+    ) -> dict[str, Any]:
         assert item.commit_sha is not None
         issue = self.gh.issue(item.issue_number)
         suffix = str(int(time.time() * 1000))[-10:]
@@ -918,7 +944,7 @@ class Controller:
             .replace("{{HEAD_SHA}}", item.commit_sha)
         )
         started = time.monotonic()
-        self.agents.start(
+        pane, _started_at = self.agents.start(
             cwd=Path(item.worktree),
             name=name,
             model=self.config.reviewer_model,
@@ -926,6 +952,10 @@ class Controller:
             permission_profile="read-only",
             prompt=prompt,
         )
+        self._record_pane(item, pane)
+        # Persist before waiting so a crashed risk reviewer remains an owned
+        # resource that a later recovery can safely inspect and close.
+        self.store.save(state)
         run = self.agents.collect(
             name=name,
             timeout_seconds=self.config.reviewer_timeout,
@@ -966,6 +996,178 @@ class Controller:
             ):
                 blockers.append("review changes are requested")
         return list(dict.fromkeys(blockers))
+
+    def _record_pane(self, item: IssueState, pane_id: str) -> None:
+        """Persist only opaque pane identifiers returned by Herdr for this Issue."""
+        if not pane_id:
+            raise RuntimeError("agent did not return a pane id")
+        if pane_id not in item.owned_panes:
+            item.owned_panes.append(pane_id)
+
+    def _record_gitleaks_artifact(
+        self,
+        state: ControllerState,
+        item: IssueState,
+    ) -> None:
+        # Persist the deterministic identifiers before a scan so an abnormal
+        # Docker exit leaves a recoverable, but still ownership-checked, trail.
+        name = getattr(self.gitleaks, "name", None)
+        cidfile = getattr(self.gitleaks, "cidfile", None)
+        if not callable(name) or not callable(cidfile):
+            return
+        item.secret_scan_container_name = name(
+            state.run_id, item.issue_number, item.attempt
+        )
+        item.secret_scan_cidfile = str(
+            cidfile(state.run_id, item.issue_number, item.attempt)
+        )
+        self.store.save(state)
+
+    def _merge_is_confirmed(self, item: IssueState) -> bool:
+        """Confirm that deleting a local branch cannot discard an unmerged PR."""
+        if not item.pr_url or not item.commit_sha:
+            return False
+        pr = self.gh.pr(item.pr_url)
+        return (
+            pr.get("state") == "MERGED"
+            and pr.get("headRefOid") == item.commit_sha
+            and pr.get("headRefName") == item.branch
+        )
+
+    def _cleanup_after_merge(
+        self,
+        state: ControllerState,
+        item: IssueState,
+        *,
+        merge_confirmed: bool,
+    ) -> None:
+        """Best-effort local cleanup.  It never changes a successful merge."""
+        if item.phase not in {Phase.DONE, Phase.CLEANED}:
+            return
+        errors: list[str] = []
+        try:
+            confirmed = merge_confirmed or self._merge_is_confirmed(item)
+        except RuntimeError as exc:
+            confirmed = False
+            errors.append(f"merge verification failed: {exc}")
+        if not confirmed:
+            errors.append("merged PR/head ownership could not be confirmed")
+
+        pane_ids = list(dict.fromkeys([
+            *item.owned_panes,
+            *([item.pane_id] if item.pane_id else []),
+        ]))
+        panes_safe = True
+        try:
+            panes = {
+                str(pane.get("pane_id")): pane for pane in self.herdr.panes()
+            }
+            for pane_id in pane_ids:
+                pane = panes.get(pane_id)
+                if pane is None:
+                    continue
+                if pane.get("agent_status") == "working":
+                    errors.append(f"owned pane is still working: {pane_id}")
+                    panes_safe = False
+                    continue
+                self.herdr.close_pane(pane_id)
+        except (RuntimeError, AttributeError) as exc:
+            errors.append(f"pane cleanup failed: {exc}")
+            panes_safe = False
+
+        worktree_removed = False
+        if item.worktree and panes_safe:
+            try:
+                worktree = self._owned_worktree(item)
+                if not self.git.is_clean(worktree):
+                    errors.append("worktree is not clean")
+                elif not confirmed:
+                    errors.append("worktree retained until merge is confirmed")
+                else:
+                    self.git.remove_worktree(worktree)
+                    worktree_removed = True
+            except (OSError, RuntimeError) as exc:
+                # A missing canonical worktree after an earlier successful
+                # cleanup is benign; any other ownership failure is retained.
+                expected = worktree_path(self.repo, item.issue_number)
+                if Path(item.worktree).resolve() == expected.resolve() and not expected.exists():
+                    worktree_removed = True
+                else:
+                    errors.append(f"worktree cleanup failed: {exc}")
+
+        if panes_safe and confirmed and (worktree_removed or not item.worktree):
+            try:
+                branch_exists = getattr(self.git, "branch_exists")
+                branch_head = getattr(self.git, "branch_head")
+                if branch_exists(item.branch):
+                    if branch_head(item.branch) != item.commit_sha:
+                        raise RuntimeError("local branch head does not match recorded commit")
+                    # The caller confirmed MERGED and this exact local head,
+                    # so force-delete only this local branch. No remote ref
+                    # is ever touched.
+                    self.git.delete_branch(item.branch, force=True)
+            except (AttributeError, RuntimeError) as exc:
+                errors.append(f"local branch cleanup failed: {exc}")
+
+        cleanup = getattr(self.gitleaks, "cleanup", None)
+        if callable(cleanup) and (
+            item.secret_scan_container_name or item.secret_scan_cidfile
+        ):
+            try:
+                cleanup(
+                    state.run_id,
+                    item.issue_number,
+                    item.attempt,
+                    item.secret_scan_container_name,
+                    item.secret_scan_cidfile,
+                )
+                item.secret_scan_container_name = None
+                item.secret_scan_cidfile = None
+            except RuntimeError as exc:
+                errors.append(f"gitleaks cleanup failed: {exc}")
+
+        if errors:
+            item.cleanup_status = "warning"
+            item.cleanup_error = "; ".join(dict.fromkeys(errors))
+            return
+        item.cleanup_status = "cleaned"
+        item.cleanup_error = None
+        item.cleanup_completed_at = self._now()
+        # Do not write CLEANED for new states: DONE describes delivery and
+        # cleanup_status describes local resource reclamation.
+        if item.phase is Phase.CLEANED:
+            item.phase = Phase.DONE
+
+    def _manual_cleanup_unmerged(self, item: IssueState) -> None:
+        """Retain the legacy explicit-cleanup path for published local work."""
+        worktree = self._owned_worktree(item)
+        if not self.git.is_clean(worktree):
+            raise RuntimeError("worktree is not a clean owned resource")
+        panes = {
+            str(pane.get("pane_id")): pane for pane in self.herdr.panes()
+        }
+        pane_ids = list(dict.fromkeys([
+            *item.owned_panes,
+            *([item.pane_id] if item.pane_id else []),
+        ]))
+        for pane_id in pane_ids:
+            pane = panes.get(pane_id)
+            if pane is None:
+                continue
+            if pane.get("agent_status") == "working":
+                raise RuntimeError("owned agent is still running")
+        for pane_id in pane_ids:
+            if pane_id in panes:
+                self.herdr.close_pane(pane_id)
+        self.git.remove_worktree(worktree)
+        # Legacy explicit cleanup deliberately keeps Git's non-force safety:
+        # an unmerged local branch remains for recovery.
+        self.git.delete_branch(item.branch, force=False)
+        item.phase = Phase.CLEANED
+        item.ended_at = self._now()
+        item.cleanup_status = "cleaned"
+        item.cleanup_error = None
+        item.cleanup_completed_at = item.ended_at
 
     def _owned_worktree(self, item: IssueState) -> Path:
         expected = worktree_path(self.repo, item.issue_number)

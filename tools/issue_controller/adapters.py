@@ -113,6 +113,13 @@ class GitAdapter:
             == 0
         )
 
+    def branch_head(self, branch: str) -> str:
+        return sha(
+            self.checked(
+                "rev-parse", "--verify", f"refs/heads/{branch}"
+            ).stdout.strip()
+        )
+
     def add_worktree(self, path: Path, branch: str, base_sha: str) -> None:
         if path.exists() or self.branch_exists(branch):
             raise RuntimeError("branch or worktree already exists")
@@ -380,8 +387,12 @@ class GitAdapter:
     def remove_worktree(self, path: Path) -> None:
         self.checked("worktree", "remove", "--", str(path))
 
-    def delete_branch(self, branch: str) -> None:
-        self.checked("branch", "-d", "--", branch)
+    def delete_branch(self, branch: str, *, force: bool = False) -> None:
+        # `force=True` is used only after the Controller has confirmed a
+        # merged PR and the exact recorded local head. Squash merges do not
+        # make the original commit an ancestor of the base. This never
+        # addresses a remote ref.
+        self.checked("branch", "-D" if force else "-d", "--", branch)
 
 
 class GitHubAdapter:
