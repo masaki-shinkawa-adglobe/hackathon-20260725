@@ -32,7 +32,7 @@ Issue 12をcleanupして
 
 ### 前提条件
 
-ControllerはPython 3.12以上で動作し、`git`、認証済み`gh`、`herdr`、`codex`、`/usr/bin/docker`を必要とします。ControllerはHerdr管理下のpaneで`HERDR_ENV=1`として動作します。設定済みの固定テストは対象worktreeを作業ディレクトリとする通常の子プロセスとして実行するため、信頼できるコマンドだけを設定してください。
+ControllerはPython 3.12以上で動作し、`git`、認証済み`gh`、`herdr`、`codex`、`docker`を必要とします。各コマンドは`PATH`から解決します。ControllerはHerdr管理下のpaneで`HERDR_ENV=1`として動作します。設定済みの固定テストは対象worktreeを作業ディレクトリとする通常の子プロセスとして実行するため、信頼できるコマンドだけを設定してください。
 
 Gitleaks imageは[tools/gitleaks-image.lock](tools/gitleaks-image.lock)のdigestで固定します。実行環境にはあらかじめ取得しておきます。
 

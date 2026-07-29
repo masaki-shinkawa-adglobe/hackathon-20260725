@@ -5,7 +5,7 @@ base_branch = "main"
 remote = "origin"
 
 [secret_scan]
-runtime = "/usr/bin/docker"
+runtime = "docker"
 image_lock = "tools/gitleaks-image.lock"
 timeout_seconds = 120
 required = true

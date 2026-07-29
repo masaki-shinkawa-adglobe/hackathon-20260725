@@ -84,7 +84,11 @@ class Controller:
             ([self.config.docker, "--version"], "docker"),
             (["codex", "--help"], "codex"),
         ):
-            if self.runner.run(argv).returncode:
+            try:
+                missing = self.runner.run(argv).returncode != 0
+            except RuntimeError:
+                missing = True
+            if missing:
                 failures.append(f"missing required {name}")
         try:
             self.git.verify_repository()

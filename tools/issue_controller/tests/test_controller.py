@@ -436,6 +436,24 @@ class ControllerTests(unittest.TestCase):
       path=Path(d)/"config.toml"
       path.write_text('version=1\n[worker]\nsandbox_mode="workspace-write"\n')
       with self.assertRaises(ValueError): load_config(path)
+  def test_docker_runtime_defaults_to_path_lookup(self):
+    with tempfile.TemporaryDirectory() as d:
+      path=Path(d)/"config.toml";path.write_text("version=1\n")
+      self.assertEqual(load_config(path).docker,"docker")
+  def test_doctor_reports_missing_path_command_without_crashing(self):
+    class DoctorRunner(ProcessRunner):
+      def run(self,argv,**kwargs):
+        if argv[0]=="docker": raise RuntimeError("cannot execute: docker")
+        return ProcessResult(tuple(argv),0,"","")
+    with tempfile.TemporaryDirectory() as d:
+      repo=Path(d)/"repo";repo.mkdir()
+      controller=Controller(repo,ControllerConfig(),DoctorRunner())
+      controller.git=type("Git",(),{"verify_repository":lambda self:None})()
+      controller.herdr=type("Herdr",(),{"help_commands":lambda self:[],"current_pane":lambda self:None,"panes":lambda self:[],"agents":lambda self:[]})()
+      controller.gh=type("Gh",(),{"repo":lambda self:{}})()
+      controller.gitleaks=type("Gitleaks",(),{"verify_image_is_local":lambda self:None})()
+      with patch.dict(os.environ,{"HERDR_ENV":"1","CODEX_HOME":str(Path(d)/"codex")},clear=False):
+        self.assertIn("missing required docker",controller.doctor())
   def test_fake_executable_uses_literal_argv(self):
     with tempfile.TemporaryDirectory() as d:
       f=Path(d)/"fake";out=Path(d)/"out";f.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$OUTPUT\"\n");f.chmod(f.stat().st_mode|stat.S_IXUSR)

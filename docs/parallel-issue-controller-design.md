@@ -254,7 +254,7 @@ remote = "origin"
 identity = "current-user"
 
 [secret_scan]
-runtime = "/usr/bin/docker"
+runtime = "docker"
 image_lock = "tools/gitleaks-image.lock"
 container_name_template = "issue-controller-gitleaks-{run_id}-{issue_number}-{attempt}"
 config_mount_target = "/gitleaks-config/gitleaks.toml"

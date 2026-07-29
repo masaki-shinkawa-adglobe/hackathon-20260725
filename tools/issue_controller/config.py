@@ -53,7 +53,7 @@ class ControllerConfig:
     planner_model: str = "gpt-5.6-sol"
     planner_reasoning: str = "medium"
     planner_fallback: str = "blocked"
-    docker: str = "/usr/bin/docker"
+    docker: str = "docker"
     image_lock: str = "tools/gitleaks-image.lock"
     gitleaks_timeout: int = 120
     forbidden_paths: tuple[str, ...] = DEFAULT_FORBIDDEN
@@ -215,7 +215,7 @@ def load_config(path: Path) -> ControllerConfig:
             planner.get("fallback", "blocked"),
         ),
         docker=_string(
-            secret_scan.get("runtime", "/usr/bin/docker"),
+            secret_scan.get("runtime", "docker"),
             "secret_scan.runtime",
         ),
         image_lock=_string(
