@@ -4,12 +4,8 @@ version = 1
 base_branch = "main"
 remote = "origin"
 
-[sandbox]
-runner = "bubblewrap"
-required = true
-
 [secret_scan]
-runtime = "/usr/bin/docker"
+runtime = "docker"
 image_lock = "tools/gitleaks-image.lock"
 timeout_seconds = 120
 required = true

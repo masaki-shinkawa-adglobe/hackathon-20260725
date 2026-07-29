@@ -26,7 +26,6 @@ from .policy import (
 from .process_runner import ProcessRunner
 from .reconciliation import reconcile
 from .result_parser import review_result, worker_result
-from .sandbox import BubblewrapRunner
 from .state import StateStore
 from .validation import (
     branch,
@@ -59,11 +58,6 @@ class Controller:
         )
         self.gh = GitHubAdapter(self.runner)
         self.herdr = HerdrAdapter(self.runner)
-        self.sandbox = BubblewrapRunner(
-            self.config.sandbox_runner,
-            self.runner,
-            self.state_root,
-        )
         image_lock = Path(self.config.image_lock)
         if not image_lock.is_absolute():
             image_lock = self.repo / image_lock
@@ -87,11 +81,14 @@ class Controller:
             (["git", "--version"], "git"),
             (["gh", "--version"], "gh"),
             (["herdr", "--help"], "herdr"),
-            ([self.config.sandbox_runner, "--version"], "bubblewrap"),
             ([self.config.docker, "--version"], "docker"),
             (["codex", "--help"], "codex"),
         ):
-            if self.runner.run(argv).returncode:
+            try:
+                missing = self.runner.run(argv).returncode != 0
+            except RuntimeError:
+                missing = True
+            if missing:
                 failures.append(f"missing required {name}")
         try:
             self.git.verify_repository()
@@ -118,12 +115,6 @@ class Controller:
             self.gitleaks.verify_image_is_local()
         except RuntimeError as exc:
             failures.append(str(exc))
-        try:
-            result = self.sandbox.run(self.repo, ["/usr/bin/true"], 10)
-            if result.returncode:
-                failures.append("bubblewrap smoke test failed")
-        except RuntimeError:
-            failures.append("bubblewrap smoke test failed")
         try:
             reject_legacy_sandbox_layers(self.repo)
         except RuntimeError as exc:
@@ -562,10 +553,10 @@ class Controller:
             raise RuntimeError("blocked:secret-finding")
         item.tests = []
         for command in self.config.verify_commands:
-            result = self.sandbox.run(
-                worktree,
+            result = self.runner.run(
                 list(command.argv),
-                command.timeout_seconds,
+                cwd=worktree,
+                timeout=command.timeout_seconds,
             )
             test = {
                 "name": command.name,

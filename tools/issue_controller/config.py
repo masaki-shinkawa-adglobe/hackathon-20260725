@@ -53,9 +53,7 @@ class ControllerConfig:
     planner_model: str = "gpt-5.6-sol"
     planner_reasoning: str = "medium"
     planner_fallback: str = "blocked"
-    sandbox_runner: str = "/usr/bin/bwrap"
-    sandbox_required: bool = True
-    docker: str = "/usr/bin/docker"
+    docker: str = "docker"
     image_lock: str = "tools/gitleaks-image.lock"
     gitleaks_timeout: int = 120
     forbidden_paths: tuple[str, ...] = DEFAULT_FORBIDDEN
@@ -119,7 +117,6 @@ def load_config(path: Path) -> ControllerConfig:
         raise ValueError("unsupported config version")
 
     repository = _table(raw, "repository")
-    sandbox = _table(raw, "sandbox")
     secret_scan = _table(raw, "secret_scan")
     scheduler = _table(raw, "scheduler")
     policy = _table(raw, "policy")
@@ -140,10 +137,6 @@ def load_config(path: Path) -> ControllerConfig:
         if legacy_keys & set(table):
             raise ValueError(f"legacy permission setting in {table_name}")
 
-    if sandbox.get("runner", "bubblewrap") != "bubblewrap":
-        raise ValueError("only bubblewrap is supported")
-    if sandbox.get("required", True) is not True:
-        raise ValueError("sandbox.required must be true")
     if secret_scan.get("required", True) is not True:
         raise ValueError("secret_scan.required must be true")
 
@@ -221,10 +214,8 @@ def load_config(path: Path) -> ControllerConfig:
         planner_fallback=_planner_fallback(
             planner.get("fallback", "blocked"),
         ),
-        sandbox_runner="/usr/bin/bwrap",
-        sandbox_required=True,
         docker=_string(
-            secret_scan.get("runtime", "/usr/bin/docker"),
+            secret_scan.get("runtime", "docker"),
             "secret_scan.runtime",
         ),
         image_lock=_string(

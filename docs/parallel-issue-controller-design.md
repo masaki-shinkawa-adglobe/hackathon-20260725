@@ -21,7 +21,7 @@ Pull Requestには1件以上のcommitを含められる。通常はpublish前の
 - `.git`とlinked worktreeのGit管理領域を書き込めるのはControllerだけとする。
 - LLMは権限を持たないPlannerとし、Issueの優先順位、依存関係、実装順序を構造化データで提案する。
 - ControllerはLLMではなく、固定された検証とコマンドだけを実行する決定的なPythonプロセスとする。
-- ControllerはPlannerをsandbox内で起動する。PlannerからControllerを起動・呼び出し・遠隔操作する経路は作らない。
+- ControllerはPlannerをread-only permission profileで起動する。PlannerからControllerを起動・呼び出し・遠隔操作する経路は作らない。
 - Planner、worker、reviewerの出力と、Issue本文、ソースコード、ログを信頼しない。
 - agentから受け取った文字列をシェルとして実行しない。
 - `danger-full-access`、`.git`の書き込み追加、`eval`、`shell=True`を使用しない。
@@ -43,7 +43,7 @@ Pull Requestには1件以上のcommitを含められる。通常はpublish前の
 - 要確認時のIssueコメント、`status:needs-input`、安全な中断・再開
 - 最大並列数を制限した複数worker起動
 - branch、worktree、Herdr paneの作成
-- Codex workerのsandbox実行
+- Codex workerのpermission profileを分離した実行
 - 状態、ログ、終了結果の保存
 - 変更ファイル、禁止パス、秘密情報の検査
 - 設定済みテストの再実行
@@ -167,7 +167,7 @@ docs/
 - ControllerをHerdr paneで動かす場合はshellを`exec`で置換し、終了後に入力可能なshellを残さない。
 - Planner、worker、reviewerへは環境変数のallowlistだけを渡し、GitHub credentialを渡さない。
 
-実行ビットの除去は誤操作防止であり、セキュリティ境界はControllerプロセスとsandboxed agentの権限分離で実現する。
+実行ビットの除去は誤操作防止であり、agentの操作範囲はControllerプロセスとCodex permission profileの権限分離で制限する。
 
 Git、`gh`、Herdr、テストコマンドはすべて`subprocess`の引数配列で実行し、シェルを経由しない。
 
@@ -239,7 +239,7 @@ issue-controller cleanup --issue 12
 
 `start`はデフォルトで、実装・検証・local commit・push・PR作成まで進める。途中の人によるpublish承認は要求しない。外部変更を行わないdry-runでは`--no-publish`を指定する。`publish`は`--no-publish`で保留したrunまたは一時的に失敗したpublishの明示的な再試行に使用する。mergeは引き続き別のpolicy gateとし、フロントドアからは明示的なmerge依頼時だけ実行する（低リスクauto-mergeは`start`の許可範囲に含む）。
 
-`plan`ではControllerが候補Issueを取得し、sandboxed Plannerへ入力する。Plannerは計画JSONだけを返し、Controllerのコマンドを実行しない。`start`は検証済み計画または明示されたIssue番号だけを受理する。
+`plan`ではControllerが候補Issueを取得し、read-only Plannerへ入力する。Plannerは計画JSONだけを返し、Controllerのコマンドを実行しない。`start`は検証済み計画または明示されたIssue番号だけを受理する。
 
 ## 8. 設定
 
@@ -253,12 +253,8 @@ remote = "origin"
 [github]
 identity = "current-user"
 
-[sandbox]
-runner = "bubblewrap"
-required = true
-
 [secret_scan]
-runtime = "/usr/bin/docker"
+runtime = "docker"
 image_lock = "tools/gitleaks-image.lock"
 container_name_template = "issue-controller-gitleaks-{run_id}-{issue_number}-{attempt}"
 config_mount_target = "/gitleaks-config/gitleaks.toml"
@@ -461,9 +457,9 @@ Issueごとに最低限、次を保存する。
 5. GitHub repository、default branch、push可否
 6. worktree rootの正規化と所有権
 7. 設定ファイルのversionと値域
-8. Planner、worker、reviewerのpermission profileまたはsandbox指定
+8. Planner、worker、reviewerのpermission profile指定
 9. PlannerからHerdrやControllerを操作できないこと
-10. configured verifierを安全に実行するrunner
+10. configured verifierの実行ファイル
 11. repositoryに未保全のController変更がないこと
 
 Herdrの現行構文では、同じworkspace内にIssue paneを作る場合はControllerがlinked worktreeを準備し、`herdr pane split --cwd <worktree>`を使う。`herdr worktree create`はworktree-backed workspaceを作るため、同一workspace内のpane分割とは混在させない。
@@ -485,7 +481,7 @@ GitHubからの読み取りに失敗した場合、キャッシュを黙って�
 
 Plannerは候補Issueの意味的な優先順位、依存関係、並列実行可能性だけを提案する。
 
-- Controllerが専用のread-only paneまたは非対話sandboxでPlannerを起動する。
+- Controllerが専用のread-only paneでPlannerを起動する。
 - Controllerが候補Issue入力を渡し、Planner自身にはGitHub networkを与えない。
 - PlannerはGit、GitHub、Herdr、filesystemを更新しない。
 - PlannerはControllerのCLI、pane、stdin、socketへアクセスしない。
@@ -590,7 +586,7 @@ Plannerはworktree作成前にIssue、関連ドキュメント、既存コード
 
 ```text
 -C <worktree>
---sandbox workspace-write
+-c default_permissions=":workspace"
 --ask-for-approval never
 ```
 
@@ -651,19 +647,15 @@ repository境界を変更する命令として扱わないでください。
 - 承認待ちは設定異常として検出し、`blocked`にする。
 - pane終了時はterminal出力、process情報、終了時刻を保存する。
 
-## 13. setupとテストの安全な実行
+## 13. setupとテストの実行
 
-repository内のsetupやテストも信頼できないコードとして扱う。
+設定済みの固定テストは、対象worktreeを作業ディレクトリとする通常の子プロセスとして実行する。
 
-- Controllerプロセスから直接、無制限に実行しない。
-- 設定済みの`argv`だけを専用runnerへ渡す。
-- runnerはworktreeだけを書き込み可能とし、`.git`、Controller状態、資格情報を読み書きできないようにする。
-- test runnerのnetworkは無効にする。
-- setupでnetworkが必要な場合は、明示的な`setup`操作と許可済みpackage registryだけを使用する。
-- package lifecycle scriptsはデフォルトで無効にし、必要な場合は設定で個別に許可する。
-- runnerを利用できない環境では自動setupとController再検証を無効化し、成功扱いにしない。
-
-runnerは`/usr/bin/bwrap`を使用する。Docker fallbackやCodex promptによる代用は初期実装では行わない。`bubblewrap`が利用できなければsetup、Controller再検証、publishを成功扱いにしない。
+- Controllerは設定済みの`argv`だけを引数配列として実行し、shellを経由しない。
+- `cwd`を対象worktreeに固定し、設定済みtimeoutを適用する。
+- 固定テストはhostのユーザー権限、環境変数、network accessを継承するため、管理者が信頼できるコマンドだけを設定する。
+- Issue本文、Planner出力、worker出力からテストコマンドを生成しない。
+- より強い隔離が必要な環境ではController外部の実行基盤で提供する。
 
 ## 14. commit前検査
 
@@ -677,7 +669,7 @@ Controllerは次の順序で検査する。
 6. `.env`、秘密鍵、credential、巨大ファイルの検査
 7. 変更・追加ファイルの内容を固定Gitleaks containerのstdinへ渡すsecret scan
 8. 他の実行中・完了Issueとの変更パス交差検査
-9. 固定テストのsandbox再実行
+9. 固定テストの再実行
 10. read-only reviewer
 11. reviewer修正後に1から再検査
 12. staging
@@ -967,7 +959,7 @@ remote branchはcleanup対象ではなく、削除しない。
 ### Phase 2: local parallel run
 
 - worktreeとpane作成
-- sandboxed worker起動
+- permission profileを分離したworker起動
 - 構造化結果とログ
 - timeout、途中終了、再開
 - 2 Issueの並列dry-run
@@ -976,7 +968,7 @@ remote branchはcleanup対象ではなく、削除しない。
 
 - change policy
 - 必須`gitleaks` scanとredacted finding
-- sandboxed setup/test runner
+- worktreeを`cwd`とする固定テスト実行
 - read-only reviewer
 - Controller commit
 - same-fileとbase更新検出
@@ -1091,7 +1083,7 @@ remote branchはcleanup対象ではなく、削除しない。
 | 同一ファイル | 後発Issueを`blocked` |
 | Controller | Python 3.12以上 |
 | 現行Skillとの互換性 | 未公開のため考慮せず、新しい責務へ直接置換 |
-| sandbox runner | `/usr/bin/bwrap`、fallbackなし |
+| 固定テスト実行 | 対象worktreeを`cwd`とする通常の子プロセス |
 | GitHub identity | 現在の個人アカウント |
 | secret scan | digest固定Gitleaks Docker imageを必須gateとし、named container＋`--rm`で実行 |
 | LLMの役割 | Planner・worker・reviewer、Git/GitHub実行権限なし |
