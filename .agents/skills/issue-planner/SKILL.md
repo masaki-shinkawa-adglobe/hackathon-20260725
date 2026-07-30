@@ -7,6 +7,8 @@ description: issue-orchestratorから渡された1件のGitHub Issueについて
 
 `$issue-orchestrator`から依頼された1件のIssueだけを計画する。
 
+開始前に[`../issue-orchestrator/references/agent-interface.md`](../issue-orchestrator/references/agent-interface.md)を全文読み、PlannerのInterfaceに従う。
+
 ## 作業
 
 1. 適用される`AGENTS.md`を読む。
@@ -23,7 +25,12 @@ description: issue-orchestratorから渡された1件のGitHub Issueについて
 
 ## 出力
 
-Markdownで次だけを返す。
+最初の非空行に次のいずれかを返す。
+
+- `OUTCOME: PLANNED`
+- `OUTCOME: BLOCKED`
+
+続けてMarkdownで次だけを返す。
 
 - 対象範囲
 - 実装手順
