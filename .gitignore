@@ -1,5 +1,8 @@
 /build/
 .env
+.next/
+.pnpm-store/
+node_modules/
 .venv-issue-controller/
 __pycache__/
 *.py[cod]
