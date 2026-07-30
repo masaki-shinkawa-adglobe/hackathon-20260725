@@ -1,4 +1,4 @@
 interface:
   display_name: "Issue Planner"
-  short_description: "Propose controller-safe issue plan JSON"
-  default_prompt: "Use $issue-planner to return only the issue planning JSON requested by the Controller."
+  short_description: "1件のIssueの実装計画を作成"
+  default_prompt: "Use $issue-planner to inspect one Issue and return a concise implementation plan."
