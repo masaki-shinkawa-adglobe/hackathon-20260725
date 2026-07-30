@@ -1,4 +1,5 @@
 /build/
+.env
 .venv-issue-controller/
 __pycache__/
 *.py[cod]
