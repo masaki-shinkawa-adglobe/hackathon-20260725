@@ -16,11 +16,25 @@ Issue Orchestrator
   → Issue Reviewer
 ```
 
+## モデル設定
+
+直接呼び出しでは `gpt-5.6-sol` と reasoning effort `medium` を推奨する。直接呼び出し時は親モデルを切り替えられないため、実行中の親モデルがこの設定と異なっても警告や停止はしない。
+
+Orchestratorが起動する各役は、経路を問わず次の設定を明示的に使用する。
+
+| 役割 | モデル | reasoning effort |
+| --- | --- | --- |
+| Planner | `gpt-5.6-terra` | `medium` |
+| Implementer | `gpt-5.6-terra` | `medium` |
+| Reviewer | `gpt-5.6-sol` | `high` |
+
+指定モデルが利用不可、または指定付き起動に失敗した場合は、別モデルへ自動切替しない。対象役を `BLOCKED` として扱い、失敗理由を利用者へ報告して終了する。
+
 ## Herdr
 
 開始時に`HERDR_ENV=1`、`herdr`コマンドの存在、インストール済みCLIの`herdr --help`、`herdr agent --help`、`herdr pane --help`を確認する。
 
-- Herdrが利用可能なら、Planner、Implementer、Reviewerごとに専用paneとCodex agentを用意し、`herdr agent prompt`と`herdr agent wait`で3役を順番に実行する。
+- Herdrが利用可能なら、Planner、Implementer、Reviewerごとに専用paneとCodex agentを用意し、`herdr agent prompt`と`herdr agent wait`で3役を順番に実行する。各役は `herdr agent start ... -- --model <model> --config model_reasoning_effort=<effort>` の形式で、上表のモデルとreasoning effortを明示して起動する。
 - コマンド構文は推測せず、インストール済みCLIの各`--help`を正とする。
 - ReviewerはPlanner、Implementerとは別の新しいagentで実行する。
 - `herdr pane split`後は`herdr pane process-info`でforeground processがshellになるまで短時間待ち、利用可能なshell paneだと確認してから`herdr agent start`を実行する。shell promptの文字列には依存しない。
@@ -31,7 +45,7 @@ Issue Orchestrator
 - 最終状態を回収したら、その役のために作成したpaneを`herdr pane close`で閉じる。
 - Orchestrator自身のpaneと、開始前から存在したpaneは閉じない。paneを閉じられない場合は利用者へ報告する。
 - `HERDR_ENV=1`でない、`herdr`が存在しない、またはHerdrを安全に操作できない場合は、Codexのサブエージェント機能へフォールバックする。
-- サブエージェントへフォールバックした場合も同じInterfaceを使い、修正と再レビューは同じImplementer、Reviewerへfollow-upする。
+- サブエージェントへフォールバックした場合は、各役の `spawn_agent` で `fork_turns: "none"`、上表の `model`、`reasoning_effort` を明示する。`fork_turns` の省略または `all` は使用しない。同じInterfaceを使い、修正と再レビューは同じImplementer、Reviewerへfollow-upして、起動時のagentと設定を維持する。
 - Herdrの利用有無とフォールバック理由を利用者へ報告する。
 
 ## 手順

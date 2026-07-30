@@ -7,6 +7,10 @@ description: issue-orchestratorから渡された1件のGitHub IssueとPlanner�
 
 `$issue-orchestrator`から渡されたIssueとPlannerの計画だけを実装する。
 
+## 実行設定
+
+Orchestratorから起動するときは、`gpt-5.6-terra` と reasoning effort `medium` を明示して起動される。指定モデルが利用不可、または指定付き起動に失敗した場合は、別モデルへ自動切替せず `BLOCKED` として理由をOrchestratorへ返す。
+
 開始前に[`../issue-orchestrator/references/agent-interface.md`](../issue-orchestrator/references/agent-interface.md)を全文読み、ImplementerのInterfaceに従う。
 
 ## 作業
