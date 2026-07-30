@@ -1,0 +1,13 @@
+{
+  "name": "hackathon-20260725",
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "pnpm@11.16.0",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "lint": "pnpm --filter web lint",
+    "build": "pnpm --filter web build"
+  }
+}

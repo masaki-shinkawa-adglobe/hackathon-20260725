@@ -41,6 +41,18 @@ services:
       migrate:
         condition: service_completed_successfully
         required: true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     develop:
       watch:
         - action: sync
@@ -53,6 +65,35 @@ services:
           path: ./apps/api/pyproject.toml
         - action: rebuild
           path: ./apps/api/uv.lock
+
+  web:
+    image: hackathon-web:local
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      INTERNAL_API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+        required: true
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web/src
+          target: /workspace/apps/web/src
+        - action: rebuild
+          path: ./apps/web/package.json
+        - action: rebuild
+          path: ./apps/web/Dockerfile
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+        - action: rebuild
+          path: ./pnpm-workspace.yaml
 
 volumes:
   postgres_data:

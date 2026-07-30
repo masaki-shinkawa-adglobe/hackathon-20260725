@@ -1,0 +1,9 @@
+.git
+.next
+.pnpm-store
+.venv-issue-controller
+**/.next
+**/node_modules
+**/__pycache__
+build
+node_modules
