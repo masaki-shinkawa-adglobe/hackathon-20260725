@@ -6,7 +6,7 @@
 
 ## 背景
 
-既存リポジトリにはPython製Issue Controllerがあり、新たにNext.jsフロントエンド、FastAPIバックエンド、PostgreSQLを追加する。従来のNext.jsルート直下配置では、既存Python packageとの境界が曖昧になり、フロントエンドとバックエンドの依存管理やDocker build contextが衝突しやすい。
+Issue Agent SkillsとWebアプリケーションを同じリポジトリで管理しながら、Next.jsフロントエンド、FastAPIバックエンド、PostgreSQLの配置と依存関係を明確に分離する必要がある。Next.jsをルート直下へ配置すると、フロントエンドとバックエンドの依存管理やDocker build contextが衝突しやすい。
 
 ローカル開発では、複数ランタイムとDBの起動順、マイグレーション、ホットリロードを再現可能にする必要がある。一方、初期構築に本番運用や業務機能を含めると、環境基盤の責務を越える。
 
@@ -23,7 +23,7 @@
 
 ## 結果
 
-- フロントエンド、バックエンド、既存Issue Controllerの依存関係と配置境界が明確になる。
+- Issue Agent Skills、フロントエンド、バックエンドの配置境界が明確になる。
 - 一つのComposeコマンドで起動順と開発時の自動反映を再現できる。
 - DBはホストから直接接続できないため、手動操作には`docker compose exec db psql`などを使用する。
 - 外部APIを挟む処理では単一の長時間トランザクションを使えないため、短いDB処理と状態管理・冪等性を組み合わせる。

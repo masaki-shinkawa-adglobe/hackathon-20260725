@@ -1,23 +1,49 @@
-# Issue Agents
+# Issue Agents・Web開発環境
 
-## Issue実装フロー
+このリポジトリには、GitHub Issueの要件整理から実装・レビュー・Draft PR作成までを役割分担して進めるIssue Agent Skillsと、Next.js・FastAPI・PostgreSQLによるWebアプリケーションのローカル開発環境が含まれています。
+
+## リポジトリ構成
 
 ```text
-利用者
-  → Issue Orchestrator
-    → Issue Planner
-    → Issue Implementer
-    → Issue Reviewer
+.agents/skills/
+  issue-requirements-interviewer/  # 要件整理とIssue作成
+  issue-orchestrator/              # 1件のIssue実装を進行
+  issue-planner/                   # 実装計画
+  issue-implementer/               # 実装とテスト
+  issue-reviewer/                  # 読み取り専用レビュー
+apps/
+  web/                             # Next.jsフロントエンド
+  api/                             # FastAPIバックエンドとAlembic
+compose.yaml                       # Web・API・DB・マイグレーション
+docs/adr/                          # アーキテクチャ決定記録
 ```
 
-- Orchestratorは1件のIssueを受け取り、ほかの3役を順番に呼び出します。
-- Plannerは実装計画だけを作成します。
+## Issue Agent Skills
+
+### 要件整理
+
+`issue-requirements-interviewer`は、既存文書・コード・Issue・PRを調査し、利用者へのヒアリングを通じて合意した実装単位をGitHub Issueにします。実装、PR作成、レビュー、マージは行いません。
+
+### Issue実装フロー
+
+`issue-orchestrator`は1件のGitHub Issueを受け取り、次の3役を順番に呼び出します。
+
+```text
+Issue Orchestrator
+  → Issue Planner
+  → Issue Implementer
+  → Issue Reviewer
+```
+
+- Plannerは関連コードとテストを読み、実装計画だけを作成します。
 - Implementerは計画に沿って実装とテストを行います。
-- Reviewerは変更を編集せずにレビューします。
+- Reviewerは変更を編集せず、Issueの完了条件、差分、テスト結果を独立して確認します。
+- Reviewerが変更を要求した場合は、同じImplementerが修正し、同じReviewerが再レビューします。
+- Reviewerが承認した変更だけをOrchestratorがcommit・pushし、GitHub CLIでDraft PRを作成します。
+
+OrchestratorはHerdrを利用できる場合、各役を専用paneで実行します。利用できない場合はCodexサブエージェントへフォールバックします。
 
 ### 役割別モデル
-
-Issue関連Skillは、品質とコストのバランスを取るために次のモデルとreasoning effortを使用します。
 
 | Skill | モデル | reasoning effort |
 | --- | --- | --- |
@@ -27,52 +53,80 @@ Issue関連Skillは、品質とコストのバランスを取るために次の�
 | Issue Implementer | `gpt-5.6-terra` | `medium` |
 | Issue Reviewer | `gpt-5.6-sol` | `high` |
 
-OrchestratorはHerdrとCodexサブエージェントのどちらを利用する場合も、Planner、Implementer、Reviewerへ上記の設定を明示的に渡します。指定モデルを利用できない場合は別モデルへ自動で切り替えず、`BLOCKED`として報告します。
+Requirements InterviewerとOrchestratorの設定は、直接呼び出す際の推奨値です。OrchestratorはPlanner、Implementer、Reviewerを表の設定で起動し、指定モデルを利用できない場合は別モデルへ自動で切り替えず`BLOCKED`として報告します。
 
-Requirements InterviewerとOrchestratorは直接呼び出されるため、表の設定を推奨モデルとして扱います。実行中の親モデルが異なる場合も警告や停止は行いません。
-
-## 要件整理
-
-`issue-requirements-interviewer`は、新しい要件を整理して実装前のIssueを作成する独立Skillです。Issue実装フローからは呼び出しません。
-
-## Windows＋WSL環境の前提ツール
+## 前提ツール
 
 | 項目 | 要否 | 用途・条件 |
-|---|---|---|
-| Windows 11＋WSL 2＋Ubuntu | 必須 | 開発環境の実行基盤 |
-| Codex | 必須 | 各Issue Agent Skillの実行 |
-| リポジトリ同梱のIssue Agent Skills | 必須 | Planner・Implementer・Reviewer・Orchestrator・Requirements Interviewer |
-| Git | 必須 | 差分管理、branch、commit、push |
-| GitHub CLI（`gh`） | 必須 | OrchestratorによるDraft PR作成。事前に認証が必要 |
-| Docker Desktop＋Docker Compose v2.24以上 | 必須 | Web・API・DBの起動と実装検証 |
-| Herdr | 任意（推奨） | Agentごとのpane分離。不在時はCodexサブエージェントへフォールバック |
+| --- | --- | --- |
+| Codex | 必須 | Issue Agent Skillsの実行 |
+| Git | 必須 | 差分、branch、commit、pushの管理 |
+| GitHub CLI（`gh`） | Issue実装フローで必須 | Draft PR作成。事前に認証が必要 |
+| Docker・Docker Compose v2.24以上 | Web開発で必須 | Web・API・DBの起動と検証 |
+| Herdr | 任意 | Agentごとのpane分離。不在時はCodexサブエージェントを使用 |
 | `HERDR_ENV=1` | Herdr利用時のみ必須 | Herdr管理pane内であることの判定 |
-| Node.js・pnpm | ホスト側は不要 | Dockerコンテナ内で管理 |
-| Python・uv・PostgreSQL | ホスト側は不要 | Dockerコンテナ内で管理 |
-| VS Code WSL拡張 | 任意 | WSL内リポジトリの編集支援 |
 
-## Webアプリケーション開発環境
+macOSとLinuxではDockerを利用します。Windowsでは、WSL 2のUbuntu上でリポジトリ、Codex、Git、GitHub CLIを操作し、Docker DesktopのWSL連携を使用してください。
 
-Webアプリケーションは、既存のIssue Controllerと同じリポジトリ内に次のモノレポ構成で配置します。設計判断は[ADR 0002](docs/adr/0002-fastapi-nextjs-monorepo-development.md)を参照してください。
+Node.js、pnpm、Python、uv、PostgreSQLはDockerコンテナ内に用意されるため、通常の起動ではホストへのインストールは不要です。
 
-```text
-apps/
-  web/  # Next.js 16.2.9、TypeScript、App Router、Tailwind CSS
-  api/  # Python 3.12、FastAPI、uv、SQLAlchemy、Alembic
+## Webアプリケーション
+
+| 領域 | 構成 |
+| --- | --- |
+| Web | Node.js 24、pnpm 11.16.0、Next.js 16.2.9、React 19、TypeScript、App Router、Tailwind CSS 4.3 |
+| API | Python 3.12、FastAPI、uv、SQLAlchemy 2.x、asyncpg |
+| Database | PostgreSQL 18、Alembic |
+| 開発環境 | Docker Compose、Compose Watch |
+
+構成の設計判断は[ADR 0002](docs/adr/0002-fastapi-nextjs-monorepo-development.md)を参照してください。
+
+### 環境変数
+
+コミット済みの`.env.local`には、ローカル開発用PostgreSQLの非秘密設定が定義されています。APIキーなどの秘密情報が必要な場合は、Git管理されない`.env`へ記載します。
+
+```bash
+cp .env.example .env
 ```
 
-ローカル開発ではDocker Composeを使用し、Next.js、FastAPI、PostgreSQL 18、マイグレーションを起動します。
+### 起動
 
 ```bash
 docker compose up --build --watch
 ```
 
-- Next.js: `http://localhost:3000`
-- FastAPI: `http://localhost:8000`
-- PostgreSQLはCompose内部だけで公開し、名前付きVolumeへデータを保存する
-- DBのhealthy後にAlembicを実行し、成功後にFastAPIとNext.jsを起動する
-- Next.jsの初期画面はFastAPIの`GET /health`をサーバー側から呼び、APIとDBの状態を表示する
+Composeは次の順序でサービスを起動します。
 
-`.env.local`にはコミット可能なローカルDB設定だけを置きます。`AI_API_KEY`などの秘密情報はGit管理しない`.env`へ置き、キー名だけを`.env.example`へ記載します。
+```text
+db healthy
+  → migrate completed
+    → api healthy
+      → web
+```
 
-初期構築では、業務機能、認証・認可、CORS、自動テスト、GitHub Actions、本番デプロイを対象外とします。
+| サービス | URL・公開範囲 |
+| --- | --- |
+| Next.js | `http://localhost:3000` |
+| FastAPI | `http://localhost:8000` |
+| FastAPI health check | `http://localhost:8000/health` |
+| PostgreSQL | Compose内部だけで公開 |
+
+Next.jsの初期画面はServer ComponentからFastAPIの`GET /health`を呼び出し、APIとPostgreSQLの疎通状態を表示します。PostgreSQLのデータは名前付きVolume `postgres_data`へ保存されます。
+
+### 終了
+
+```bash
+docker compose down
+```
+
+このコマンドでは名前付きVolumeを削除しないため、PostgreSQLのデータは保持されます。
+
+### ホストでの補助コマンド
+
+ホストにNode.js 24とpnpm 11.16.0を用意している場合に限り、Webアプリケーションへ次のコマンドを直接実行できます。
+
+```bash
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm build
+```
