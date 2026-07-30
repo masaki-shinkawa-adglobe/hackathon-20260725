@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:18
+    env_file:
+      - path: .env.local
+      - path: .env
+        required: false
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  migrate:
+    image: hackathon-api:local
+    command: alembic upgrade head
+    env_file:
+      - path: .env.local
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+
+  api:
+    image: hackathon-api:local
+    build:
+      context: apps/api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - path: .env.local
+      - path: .env
+        required: false
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+        required: true
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/api/app
+          target: /app/app
+        - action: sync
+          path: ./apps/api/migrations
+          target: /app/migrations
+        - action: rebuild
+          path: ./apps/api/pyproject.toml
+        - action: rebuild
+          path: ./apps/api/uv.lock
+
+volumes:
+  postgres_data:
