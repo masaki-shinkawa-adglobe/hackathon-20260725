@@ -15,6 +15,22 @@
 - Implementerは計画に沿って実装とテストを行います。
 - Reviewerは変更を編集せずにレビューします。
 
+### 役割別モデル
+
+Issue関連Skillは、品質とコストのバランスを取るために次のモデルとreasoning effortを使用します。
+
+| Skill | モデル | reasoning effort |
+| --- | --- | --- |
+| Issue Requirements Interviewer | `gpt-5.6-sol` | `medium` |
+| Issue Orchestrator | `gpt-5.6-sol` | `medium` |
+| Issue Planner | `gpt-5.6-terra` | `medium` |
+| Issue Implementer | `gpt-5.6-terra` | `medium` |
+| Issue Reviewer | `gpt-5.6-sol` | `high` |
+
+OrchestratorはHerdrとCodexサブエージェントのどちらを利用する場合も、Planner、Implementer、Reviewerへ上記の設定を明示的に渡します。指定モデルを利用できない場合は別モデルへ自動で切り替えず、`BLOCKED`として報告します。
+
+Requirements InterviewerとOrchestratorは直接呼び出されるため、表の設定を推奨モデルとして扱います。実行中の親モデルが異なる場合も警告や停止は行いません。
+
 ## 要件整理
 
 `issue-requirements-interviewer`は、新しい要件を整理して実装前のIssueを作成する独立Skillです。Issue実装フローからは呼び出しません。
