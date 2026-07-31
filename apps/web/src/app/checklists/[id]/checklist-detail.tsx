@@ -22,6 +22,7 @@ type Checklist = {
   id: number
   name: string
   description: string | null
+  backlog_project_key_or_url: string | null
   tasks: Task[]
 }
 
@@ -119,6 +120,9 @@ export function ChecklistDetail({ checklistId }: ChecklistDetailProps) {
                 </h1>
                 <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-muted-foreground sm:text-base">
                   {checklist.description || "説明はありません。"}
+                </p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Backlogプロジェクト: {checklist.backlog_project_key_or_url || "未設定"}
                 </p>
               </div>
               <Button asChild variant="outline">

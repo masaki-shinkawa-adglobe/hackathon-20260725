@@ -8,7 +8,7 @@ import { createChecklist, type ChecklistFormState } from "./actions"
 
 const previousState: ChecklistFormState = {
   errors: {},
-  values: { name: "以前の名前", description: "以前の説明" },
+  values: { name: "以前の名前", description: "以前の説明", backlogProjectKeyOrUrl: "PROJ" },
 }
 
 describe("createChecklist", () => {
@@ -25,7 +25,7 @@ describe("createChecklist", () => {
     empty.set("description", "説明")
     await expect(createChecklist(previousState, empty)).resolves.toEqual({
       errors: { name: "チェックリスト名を入力してください。" },
-      values: { name: "   ", description: "説明" },
+      values: { name: "   ", description: "説明", backlogProjectKeyOrUrl: "" },
     })
 
     const tooLong = new FormData()
@@ -33,7 +33,7 @@ describe("createChecklist", () => {
     tooLong.set("description", "説明")
     await expect(createChecklist(previousState, tooLong)).resolves.toEqual({
       errors: { name: "チェックリスト名は255文字以内で入力してください。" },
-      values: { name: "a".repeat(256), description: "説明" },
+      values: { name: "a".repeat(256), description: "説明", backlogProjectKeyOrUrl: "" },
     })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -46,12 +46,13 @@ describe("createChecklist", () => {
     const formData = new FormData()
     formData.set("name", " 新しいチェックリスト ")
     formData.set("description", "   ")
+    formData.set("backlog_project_key_or_url", " PROJ ")
 
     await expect(createChecklist(previousState, formData)).rejects.toThrow(redirectError)
     expect(fetch).toHaveBeenCalledWith(new URL("http://api:8000/checklists"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "新しいチェックリスト", description: null }),
+      body: JSON.stringify({ name: "新しいチェックリスト", description: null, backlog_project_key_or_url: " PROJ " }),
     })
     expect(redirectMock).toHaveBeenCalledWith("/checklists/3")
   })

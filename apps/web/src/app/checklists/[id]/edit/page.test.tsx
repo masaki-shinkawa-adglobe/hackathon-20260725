@@ -26,7 +26,7 @@ test("APIから取得した対象チェックリストの初期値をフォー�
     "fetch",
     vi.fn().mockResolvedValue(
       new Response(
-        JSON.stringify({ id: 1, name: "出張の準備", description: "出張前に必要な手配と持ち物を確認します。" }),
+        JSON.stringify({ id: 1, name: "出張の準備", description: "出張前に必要な手配と持ち物を確認します。", backlog_project_key_or_url: "PROJ" }),
       ),
     ),
   );
@@ -40,6 +40,7 @@ test("APIから取得した対象チェックリストの初期値をフォー�
       initialValues: {
         name: "出張の準備",
         description: "出張前に必要な手配と持ち物を確認します。",
+        backlogProjectKeyOrUrl: "PROJ",
       },
     },
     undefined,

@@ -21,6 +21,13 @@ class ChecklistWriteRequest(BaseModel):
             raise ValueError("Name must not be blank")
         return normalized_value
 
+    @field_validator("backlog_project_key_or_url")
+    @classmethod
+    def normalize_blank_backlog_project_key_or_url(cls, value: str | None) -> str | None:
+        if value is None or value.strip() == "":
+            return None
+        return value
+
 
 class ChecklistCreateRequest(ChecklistWriteRequest):
     pass
@@ -142,5 +149,6 @@ class ChecklistsResponse(BaseModel):
 
 class ChecklistDetailResponse(ChecklistResponse):
     assignee_count: int
+    backlog_project_key_or_url: str | None
     backlog_registration: BacklogRegistrationResponse
     tasks: list[TaskResponse]

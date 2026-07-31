@@ -25,7 +25,12 @@ export default async function EditChecklistPage({ params }: EditChecklistPagePro
     throw new Error("Failed to fetch checklist");
   }
 
-  const checklist: { id: number; name: string; description: string | null } = await response.json();
+  const checklist: {
+    id: number;
+    name: string;
+    description: string | null;
+    backlog_project_key_or_url: string | null;
+  } = await response.json();
 
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-10 sm:px-6 sm:py-16">
@@ -47,6 +52,7 @@ export default async function EditChecklistPage({ params }: EditChecklistPagePro
               initialValues={{
                 name: checklist.name,
                 description: checklist.description ?? "",
+                backlogProjectKeyOrUrl: checklist.backlog_project_key_or_url ?? "",
               }}
             />
           </div>

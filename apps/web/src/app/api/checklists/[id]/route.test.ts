@@ -12,7 +12,7 @@ afterEach(() => {
 describe("GET /api/checklists/[id]", () => {
   it("内部APIへ正しいGETを中継し、成功JSONを返す", async () => {
     process.env.INTERNAL_API_URL = "http://api:8000"
-    const detail = { id: 12, name: "月次決算", description: "月ごとの締め作業", tasks: [] }
+    const detail = { id: 12, name: "月次決算", description: "月ごとの締め作業", backlog_project_key_or_url: "PROJ", tasks: [] }
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(detail), { status: 200 }))
     vi.stubGlobal("fetch", fetchMock)
 
@@ -39,7 +39,7 @@ describe("GET /api/checklists/[id]", () => {
     expect(invalidJson.status).toBe(502)
     expect((await invalidJson.json()).code).toBe("proxy_invalid_response")
 
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 1, name: "名前", description: null, tasks: [{}] }), { status: 200 })))
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 1, name: "名前", description: null, backlog_project_key_or_url: null, tasks: [{}] }), { status: 200 })))
     const invalidShape = await GET(new Request("http://localhost"), context("1"))
     expect(invalidShape.status).toBe(502)
     expect((await invalidShape.json()).code).toBe("proxy_invalid_response")

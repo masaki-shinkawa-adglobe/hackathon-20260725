@@ -151,6 +151,7 @@ def test_checklist_get_response_openapi_schemas() -> None:
     }
     assert "backlog_registration" not in list_item
     assert "assignee_count" in detail
+    assert "backlog_project_key_or_url" in detail
     assert "backlog_registration" in detail
 
 
@@ -188,6 +189,19 @@ def test_create_checklist_allows_null_optional_values(client: TestClient) -> Non
     assert response.status_code == 201
     assert response.json()["description"] is None
     assert response.json()["backlog_project_key_or_url"] is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("  ", None), (" PROJ ", " PROJ ")],
+)
+def test_create_checklist_normalizes_only_blank_backlog_project_value(
+    client: TestClient, value: str, expected: str | None
+) -> None:
+    response = client.post("/checklists", json={"name": "下書き", "backlog_project_key_or_url": value})
+
+    assert response.status_code == 201
+    assert response.json()["backlog_project_key_or_url"] == expected
 
 
 @pytest.mark.parametrize(
@@ -247,6 +261,24 @@ async def test_update_checklist_preserves_omitted_optional_values(
     assert response.status_code == 200
     assert response.json()["assignee_count"] == 3
     assert response.json()["backlog_project_key_or_url"] == "PROJ"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("\t", None), (" https://example.backlog.com/projects/PROJ ", " https://example.backlog.com/projects/PROJ ")],
+)
+def test_update_checklist_normalizes_only_blank_backlog_project_value(
+    client: TestClient, value: str, expected: str | None
+) -> None:
+    created = client.post("/checklists", json={"name": "更新対象"})
+
+    response = client.patch(
+        f"/checklists/{created.json()['id']}",
+        json={"name": "更新後", "backlog_project_key_or_url": value},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["backlog_project_key_or_url"] == expected
 
 
 @pytest.mark.parametrize(
@@ -370,6 +402,7 @@ async def test_get_checklist_returns_detail_tasks_and_registration(
     assert response.json() == {
         "id": checklist.id, "name": "月次決算", "description": "月次決算の標準チェックリスト",
         "assignee_count": 3,
+        "backlog_project_key_or_url": None,
         "backlog_registration": {
             "is_registered": True, "link_id": link.id, "backlog_issue_id": 12345,
             "backlog_issue_key": "PROJ-100", "backlog_issue_url": "https://example.backlog.com/view/PROJ-100",
@@ -389,11 +422,29 @@ async def test_get_checklist_returns_empty_tasks_and_unregistered_values(
     assert response.status_code == 200
     assert response.json()["description"] is None
     assert response.json()["assignee_count"] == 1
+    assert response.json()["backlog_project_key_or_url"] is None
     assert response.json()["tasks"] == []
     assert response.json()["backlog_registration"] == {
         "is_registered": False, "link_id": None, "backlog_issue_id": None,
         "backlog_issue_key": None, "backlog_issue_url": None,
     }
+
+
+@pytest.mark.asyncio
+async def test_get_checklist_returns_configured_backlog_project_value(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    checklist = await add_checklist(session_factory)
+    async with session_factory() as session:
+        persisted = await session.get(Checklist, checklist.id)
+        assert persisted is not None
+        persisted.backlog_project_key_or_url = "PROJ"
+        await session.commit()
+
+    response = client.get(f"/checklists/{checklist.id}")
+
+    assert response.status_code == 200
+    assert response.json()["backlog_project_key_or_url"] == "PROJ"
 
 
 def test_get_checklist_returns_not_found(client: TestClient) -> None:
