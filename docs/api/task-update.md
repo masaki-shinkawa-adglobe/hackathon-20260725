@@ -20,7 +20,8 @@ Content-Type: application/json
 {
   "title": "月次仕訳データの確認",
   "summary": "当月分の仕訳データに入力漏れがないか確認します。",
-  "estimated_hours": 2.5
+  "estimated_hours": 2.5,
+  "priority": "high"
 }
 ```
 
@@ -37,7 +38,8 @@ Content-Type: application/json
   "checklist_id": 1,
   "title": "月次仕訳データの確認",
   "summary": "当月分の仕訳データに入力漏れがないか確認します。",
-  "estimated_hours": 2.5
+  "estimated_hours": 2.5,
+  "priority": "high"
 }
 ```
 
@@ -50,10 +52,11 @@ Content-Type: application/json
 | `id` | integer | - | タスクID |
 | `checklist_id` | integer | - | 紐づくチェックリストID |
 | `title` | string | 1〜255文字 | タスクタイトル |
-| `summary` | string | 1文字以上 | タスク本文 |
+| `summary` | string \| null | - | タスク本文 |
 | `estimated_hours` | number | 0より大きい有限数 | 工数 |
+| `priority` | `high` \| `medium` \| `low` | - | 優先順位（高・中・低） |
 
-リクエストでは `title`、`summary`、`estimated_hours` をすべて必須とする。`id` と `checklist_id` はパスパラメータで対象を指定し、成功レスポンスで返す。
+リクエストでは `title`、`summary`、`estimated_hours`、`priority` をすべて必須とする。`title`はtrim後1〜255文字、空白のみの`summary`は`null`へ正規化する。`id` と `checklist_id` はパスパラメータで対象を指定し、成功レスポンスで返す。
 
 ## エラーレスポンス
 

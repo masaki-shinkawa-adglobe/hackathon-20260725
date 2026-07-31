@@ -33,7 +33,9 @@ from app.schemas import (
     ChecklistUpdateResponse,
     ChecklistsResponse,
     ManualTaskCreateRequest,
+    TaskDetailResponse,
     TaskResponse,
+    TaskUpdateRequest,
 )
 
 
@@ -190,6 +192,50 @@ async def create_manual_task(
         estimated_hours=task_request.estimated_hours,
     )
     session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
+@app.get(
+    "/checklists/{checklist_id}/tasks/{task_id}",
+    response_model=TaskDetailResponse,
+)
+async def get_task(
+    checklist_id: int,
+    task_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> TaskDetailResponse:
+    result = await session.execute(
+        select(Checklist.name, Task)
+        .join(Task, Task.checklist_id == Checklist.id)
+        .where(Checklist.id == checklist_id, Task.id == task_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist or task not found")
+    checklist_name, task = row
+    return TaskDetailResponse(checklist_name=checklist_name, task=TaskResponse.model_validate(task))
+
+
+@app.patch(
+    "/checklists/{checklist_id}/tasks/{task_id}",
+    response_model=TaskResponse,
+)
+async def update_task(
+    checklist_id: int,
+    task_id: int,
+    request: TaskUpdateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Task:
+    task = await session.scalar(
+        select(Task).where(Task.id == task_id, Task.checklist_id == checklist_id)
+    )
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist or task not found")
+
+    for field, value in request.model_dump().items():
+        setattr(task, field, value)
     await session.commit()
     await session.refresh(task)
     return task

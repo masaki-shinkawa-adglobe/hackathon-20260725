@@ -27,6 +27,8 @@ Content-Type: application/json
 | `summary` | string \| null | 任意 | 未入力または空白のみは`null`へ正規化。文字数上限なし |
 | `estimated_hours` | number | 必須 | 0より大きい有限数。小数可 |
 
+作成時の優先順位は常に`medium`（中）となる。リクエストへ`priority`は含めない。
+
 画面の「タイトル」は`tasks.title`、「本文」は`tasks.summary`、「工数」は`tasks.estimated_hours`へ保存する。
 
 ## 成功レスポンス
@@ -42,7 +44,8 @@ Content-Type: application/json
   "checklist_id": 1,
   "title": "請求書の照合",
   "summary": "請求書と発注内容を照合する。",
-  "estimated_hours": 2
+  "estimated_hours": 2,
+  "priority": "medium"
 }
 ```
 
@@ -68,7 +71,7 @@ Content-Type: application/json
 
 ## 対象外
 
-- タスクの優先順位、表示順、削除、完了状態、担当者
+- タスクの優先順位の指定、表示順、削除、完了状態、担当者
 - タスク詳細取得・更新・並び替えAPI
 - AIによるタスク一括登録
 - 認証・認可

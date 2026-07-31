@@ -24,11 +24,15 @@ Content-Type: application/json
 
 ```json
 {
-  "id": 1,
-  "checklist_id": 1,
-  "title": "月次仕訳データの確認",
-  "summary": "当月分の仕訳データに入力漏れがないか確認します。",
-  "estimated_hours": 2.0
+  "checklist_name": "月次決算業務",
+  "task": {
+    "id": 1,
+    "checklist_id": 1,
+    "title": "月次仕訳データの確認",
+    "summary": "当月分の仕訳データに入力漏れがないか確認します。",
+    "estimated_hours": 2.0,
+    "priority": "medium"
+  }
 }
 ```
 
@@ -41,8 +45,9 @@ Content-Type: application/json
 | `id` | integer | - | タスクID |
 | `checklist_id` | integer | - | 紐づくチェックリストID |
 | `title` | string | 1〜255文字 | タスクタイトル |
-| `summary` | string | 1文字以上 | タスク本文 |
+| `summary` | string \| null | - | タスク本文 |
 | `estimated_hours` | number | 0より大きい有限数 | 工数 |
+| `priority` | `high` \| `medium` \| `low` | - | 優先順位（高・中・低） |
 
 ## エラーレスポンス
 

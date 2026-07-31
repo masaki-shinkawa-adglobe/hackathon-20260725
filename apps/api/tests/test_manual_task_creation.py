@@ -66,11 +66,14 @@ async def test_creates_manual_task_with_normalized_values(
         "title": "仕訳を確認",
         "summary": None,
         "estimated_hours": 1.5,
+        "priority": "medium",
     }
     async with session_factory() as session:
         task = await session.scalar(select(Task))
         assert task is not None
-        assert (task.title, task.summary, task.estimated_hours) == ("仕訳を確認", None, 1.5)
+        assert (task.title, task.summary, task.estimated_hours, task.priority) == (
+            "仕訳を確認", None, 1.5, "medium"
+        )
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -73,6 +74,25 @@ class ManualTaskCreateRequest(BaseModel):
         return value
 
 
+class TaskUpdateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    summary: str | None
+    estimated_hours: float = Field(gt=0, allow_inf_nan=False)
+    priority: Literal["high", "medium", "low"]
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def normalize_title(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("summary", mode="before")
+    @classmethod
+    def normalize_blank_summary(cls, value: object) -> object:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
+
 class ChecklistResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -89,6 +109,12 @@ class TaskResponse(BaseModel):
     title: str
     summary: str | None
     estimated_hours: float
+    priority: Literal["high", "medium", "low"]
+
+
+class TaskDetailResponse(BaseModel):
+    checklist_name: str
+    task: TaskResponse
 
 
 class AIBulkTasksResponse(BaseModel):

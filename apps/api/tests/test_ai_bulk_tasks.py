@@ -97,8 +97,8 @@ async def test_creates_generated_tasks_for_existing_checklist(
             "description": "月次決算の標準チェックリスト",
         },
         "tasks": [
-            {"id": 1, "checklist_id": checklist.id, "title": "仕訳を確認", "summary": "当月の仕訳を確認する", "estimated_hours": 2.0},
-            {"id": 2, "checklist_id": checklist.id, "title": "試算表を作成", "summary": "試算表を出力する", "estimated_hours": 1.5},
+            {"id": 1, "checklist_id": checklist.id, "title": "仕訳を確認", "summary": "当月の仕訳を確認する", "estimated_hours": 2.0, "priority": "medium"},
+            {"id": 2, "checklist_id": checklist.id, "title": "試算表を作成", "summary": "試算表を出力する", "estimated_hours": 1.5, "priority": "medium"},
         ],
     }
     async with session_factory() as session:

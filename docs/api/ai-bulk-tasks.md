@@ -41,14 +41,16 @@ Content-Type: application/json
       "checklist_id": 1,
       "title": "月次仕訳データの確認",
       "summary": "当月分として計上された仕訳データに入力漏れや不適切な勘定科目の使用がないか確認します。",
-      "estimated_hours": 2.0
+      "estimated_hours": 2.0,
+      "priority": "medium"
     },
     {
       "id": 2,
       "checklist_id": 1,
       "title": "月次試算表の作成",
       "summary": "仕訳と残高の確認完了後、当期の月次試算表を出力して作成します。",
-      "estimated_hours": 1.0
+      "estimated_hours": 1.0,
+      "priority": "medium"
     }
   ]
 }
@@ -64,6 +66,7 @@ Content-Type: application/json
 | `tasks[].title` | string | タスクタイトル |
 | `tasks[].summary` | string | タスク概要 |
 | `tasks[].estimated_hours` | number | 見積工数。0より大きい有限数 |
+| `tasks[].priority` | string | 優先順位。AI一括登録では常に`medium` |
 
 成功時、レスポンスに含まれる `tasks` はDBへ永続化済み。
 
