@@ -17,9 +17,12 @@ import SettingsPage from "./page"
 afterEach(cleanup)
 
 test("管理・連携設定の主要表示とパンくずを表示する", () => {
-  render(<SettingsPage />)
+  const { container } = render(<SettingsPage />)
 
   expect(screen.getByRole("heading", { name: "管理・連携設定", level: 1 })).toBeInTheDocument()
+  const wrapper = container.querySelector('[data-slot="sidebar-wrapper"]')
+  expect(wrapper).toContainElement(container.querySelector('[data-slot="sidebar"]'))
+  expect(wrapper).toContainElement(container.querySelector('[data-slot="sidebar-inset"]'))
   const settingsLinks = screen.getAllByRole("link", { name: "管理・連携設定" })
   expect(settingsLinks[0]).toHaveAttribute("aria-current", "page")
   expect(settingsLinks[1]).toHaveAttribute("href", "/settings")

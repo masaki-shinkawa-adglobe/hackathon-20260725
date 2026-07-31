@@ -13,6 +13,7 @@ import { AppBreadcrumb } from "@/components/app-breadcrumb"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import {
   Table,
   TableBody,
@@ -88,9 +89,9 @@ function IntegrationCard({
 
 export default function SettingsPage() {
   return (
-    <div className="min-h-svh bg-muted/30">
+    <SidebarProvider className="bg-muted/30">
       <AppSidebar />
-      <main className="min-h-svh pl-64">
+      <SidebarInset className="min-h-svh bg-transparent">
         <div className="mx-auto max-w-7xl px-10 py-8">
           <AppBreadcrumb
             items={[
@@ -202,7 +203,7 @@ export default function SettingsPage() {
             </div>
           </section>
         </div>
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
