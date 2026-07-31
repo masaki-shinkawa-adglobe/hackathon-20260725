@@ -11,9 +11,10 @@ class ChecklistWriteRequest(BaseModel):
     @field_validator("name")
     @classmethod
     def reject_blank_name(cls, value: str) -> str:
-        if value.strip() == "":
+        normalized_value = value.strip()
+        if normalized_value == "":
             raise ValueError("Name must not be blank")
-        return value
+        return normalized_value
 
 
 class ChecklistCreateRequest(ChecklistWriteRequest):
@@ -21,7 +22,14 @@ class ChecklistCreateRequest(ChecklistWriteRequest):
 
 
 class ChecklistUpdateRequest(ChecklistWriteRequest):
-    assignee_count: int = Field(ge=1, strict=True)
+    assignee_count: int = Field(default=None, ge=1, strict=True)
+
+    @field_validator("description")
+    @classmethod
+    def normalize_blank_description(cls, value: str | None) -> str | None:
+        if value is None or value.strip() == "":
+            return None
+        return value
 
 
 class ChecklistCreateResponse(BaseModel):

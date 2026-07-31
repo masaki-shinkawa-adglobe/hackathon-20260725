@@ -123,7 +123,7 @@ async def update_checklist(
     if checklist is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist not found")
 
-    for field, value in request.model_dump().items():
+    for field, value in request.model_dump(exclude_unset=True).items():
         setattr(checklist, field, value)
     await session.commit()
     await session.refresh(checklist)

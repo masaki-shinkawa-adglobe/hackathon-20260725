@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 
-import { getChecklistById } from "../../mock-data";
 import { ChecklistForm } from "./checklist-form";
 
 type EditChecklistPageProps = {
@@ -11,11 +10,22 @@ type EditChecklistPageProps = {
 
 export default async function EditChecklistPage({ params }: EditChecklistPageProps) {
   const { id } = await params;
-  const checklist = getChecklistById(id);
+  const internalApiUrl = process.env.INTERNAL_API_URL;
+  if (!internalApiUrl) {
+    throw new Error("INTERNAL_API_URL is not configured");
+  }
 
-  if (!checklist) {
+  const response = await fetch(new URL(`/checklists/${id}`, internalApiUrl));
+
+  if (response.status === 404) {
     notFound();
   }
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch checklist");
+  }
+
+  const checklist: { id: number; name: string; description: string | null } = await response.json();
 
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-10 sm:px-6 sm:py-16">
@@ -33,10 +43,10 @@ export default async function EditChecklistPage({ params }: EditChecklistPagePro
           <p className="mt-1 text-sm text-muted-foreground">チェックリストの名前は必須です。</p>
           <div className="mt-6">
             <ChecklistForm
-              checklistId={checklist.id}
+              checklistId={String(checklist.id)}
               initialValues={{
                 name: checklist.name,
-                description: checklist.description,
+                description: checklist.description ?? "",
               }}
             />
           </div>
