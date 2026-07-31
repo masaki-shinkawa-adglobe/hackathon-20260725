@@ -19,6 +19,24 @@ class GeneratedTask(BaseModel):
     estimated_hours: float = Field(gt=0, allow_inf_nan=False)
 
 
+class ManualTaskCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    summary: str | None = None
+    estimated_hours: float = Field(gt=0, allow_inf_nan=False)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def normalize_title(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("summary", mode="before")
+    @classmethod
+    def normalize_blank_summary(cls, value: object) -> object:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
+
 class ChecklistResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -27,11 +45,14 @@ class ChecklistResponse(BaseModel):
     description: str | None
 
 
-class TaskResponse(GeneratedTask):
+class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     checklist_id: int
+    title: str
+    summary: str | None
+    estimated_hours: float
 
 
 class AIBulkTasksResponse(BaseModel):
