@@ -167,4 +167,21 @@ describe("UiPreviewPage", () => {
 
     expect(await screen.findByText("AI作成タスク")).toBeInTheDocument()
   })
+
+  it("Backlogチケット発行モーダルを指定の初期値で開き、送信値を表示する", () => {
+    render(<UiPreviewPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Backlogチケット発行を開く" }))
+    expect(screen.getByRole("dialog")).toHaveTextContent("Backlog発行設定")
+    expect(screen.getByLabelText("開始日")).toHaveValue("2025-06-01")
+    expect(screen.getByLabelText("終了日")).toHaveValue("2025-06-30")
+    expect(screen.getByText("5件を選択中")).toBeInTheDocument()
+    expect(screen.getByRole("checkbox", { name: "売上データの締め処理" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "請求書の照合" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "未払費用の計上" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "固定資産の確認" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "月次レポート作成" })).toBeChecked()
+    fireEvent.click(screen.getByRole("button", { name: "Backlogに5件発行" }))
+    expect(screen.getByText(/開始日: 2025-06-01、終了日: 2025-06-30、想定担当者数: 3人、選択タスク: 1, 2, 3, 4, 5/)).toBeInTheDocument()
+  })
 })
