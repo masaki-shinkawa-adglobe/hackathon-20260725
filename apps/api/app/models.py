@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -32,6 +32,9 @@ class Checklist(Base):
 
 class Task(Base):
     __tablename__ = "tasks"
+    __table_args__ = (
+        CheckConstraint("priority IN ('low', 'medium', 'high')", name="ck_tasks_priority"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     checklist_id: Mapped[int] = mapped_column(
@@ -40,6 +43,9 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     estimated_hours: Mapped[float] = mapped_column(Float, nullable=False)
+    priority: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default=text("'medium'")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

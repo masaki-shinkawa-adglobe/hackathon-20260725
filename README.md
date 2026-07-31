@@ -121,6 +121,28 @@ docker compose down
 
 このコマンドでは名前付きVolumeを削除しないため、PostgreSQLのデータは保持されます。
 
+### パイロット確認用の初期データ
+
+以下はローカル開発・パイロット確認専用のデータです。本番環境では実行しないでください。Gemini APIキーや外部サービスへの接続は不要です。
+
+Issue #120 の優先順位対応を含むマイグレーションを適用した後、DBを起動して seeder を実行します。
+
+```bash
+docker compose up -d --build --wait db migrate api
+docker compose --profile seed run --rm seed
+```
+
+seeder は複数チェックリストと合計20件のタスクを作成します。同じ固定チェックリスト名が1件でも存在する場合は、重複作成や既存データの削除を行わず終了します。Issue #120 が未適用の場合は、データを書き込まず適用を促すエラーで終了します。
+
+タスク優先順位はDB/API値として `low`、`medium`、`high` を使用し、画面表示の低・中・高に対応します。優先順位未指定時の既定値は `medium` です。
+
+実行後、一覧からIDを取得し、詳細を確認できます。
+
+```bash
+curl http://localhost:8000/checklists
+curl http://localhost:8000/checklists/<checklist_id>
+```
+
 ### ホストでの補助コマンド
 
 ホストにNode.js 24とpnpm 11.16.0を用意している場合に限り、Webアプリケーションへ次のコマンドを直接実行できます。

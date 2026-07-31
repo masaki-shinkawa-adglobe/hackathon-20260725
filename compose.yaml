@@ -16,7 +16,25 @@ services:
 
   migrate:
     image: hackathon-api:local
+    build:
+      context: apps/api
     command: alembic upgrade head
+    env_file:
+      - path: .env.local
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+
+  seed:
+    image: hackathon-api:local
+    build:
+      context: apps/api
+    command: python -m app.seed
+    profiles:
+      - seed
     env_file:
       - path: .env.local
       - path: .env
