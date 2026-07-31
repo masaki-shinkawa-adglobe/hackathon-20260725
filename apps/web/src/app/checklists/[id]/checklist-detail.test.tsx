@@ -2,6 +2,10 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, expect, test, vi } from "vitest"
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}))
+
 import { ChecklistDetail } from "./checklist-detail"
 
 afterEach(() => {
@@ -35,6 +39,7 @@ test("実API形式のチェックリストとタスクを表示する", async ()
   expect(screen.getByRole("cell", { name: "1.5時間" })).toBeInTheDocument()
   expect(screen.getByRole("link", { name: "チェックリスト一覧へ戻る" })).toHaveAttribute("href", "/")
   expect(screen.getByRole("link", { name: "編集する" })).toHaveAttribute("href", "/checklists/1/edit")
+  expect(screen.getByRole("button", { name: "削除する" })).toBeInTheDocument()
 })
 
 test("タスクが0件の場合は空状態を表示する", async () => {
