@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 
 import { AppBreadcrumb } from "@/components/app-breadcrumb"
 import { AIBulkTasksDialog, type AIBulkTask } from "@/components/ai-bulk-tasks-dialog"
+import { BacklogTicketDialog, type BacklogTicketDialogSubmitValues } from "@/components/backlog-ticket-dialog"
 import { AppDialog, type AppDialogSize } from "@/components/app-dialog"
 import { AppSidebar } from "@/components/app-sidebar"
 import {
@@ -28,6 +29,14 @@ const previewRows: PreviewRow[] = [
   { id: "1", name: "出張準備", status: "進行中", updatedAt: "2026-07-30" },
   { id: "2", name: "イベント準備", status: "未着手", updatedAt: "2026-07-29" },
   { id: "3", name: "入社準備", status: "完了", updatedAt: "2026-07-28" },
+]
+
+const backlogPreviewTasks = [
+  { id: "1", title: "売上データの締め処理" },
+  { id: "2", title: "請求書の照合" },
+  { id: "3", title: "未払費用の計上" },
+  { id: "4", title: "固定資産の確認" },
+  { id: "5", title: "月次レポート作成" },
 ]
 
 const columns: DataTableColumn<PreviewRow>[] = [
@@ -72,6 +81,8 @@ export default function UiPreviewPage() {
   const [checklistId, setChecklistId] = useState("1")
   const [isAIBulkTasksDialogOpen, setIsAIBulkTasksDialogOpen] = useState(false)
   const [createdTasks, setCreatedTasks] = useState<AIBulkTask[]>([])
+  const [isBacklogTicketDialogOpen, setIsBacklogTicketDialogOpen] = useState(false)
+  const [backlogTicketValues, setBacklogTicketValues] = useState<BacklogTicketDialogSubmitValues | null>(null)
 
   const data = useMemo(() => {
     if (tableState === "empty") {
@@ -127,6 +138,25 @@ export default function UiPreviewPage() {
               <Button variant="destructive">destructive</Button>
               <Button variant="ghost">ghost</Button>
             </div>
+          </section>
+
+          <section className="space-y-4 rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
+            <div>
+              <h2 className="text-lg font-semibold">Backlogチケット発行</h2>
+              <p className="text-sm text-muted-foreground">Backlog連携前の発行設定モーダルを確認します。</p>
+            </div>
+            <Button onClick={() => setIsBacklogTicketDialogOpen(true)}>Backlogチケット発行を開く</Button>
+            {backlogTicketValues && <output aria-live="polite" className="block rounded-lg bg-muted p-3 text-sm">開始日: {backlogTicketValues.startDate}、終了日: {backlogTicketValues.endDate}、想定担当者数: {backlogTicketValues.expectedAssigneeCount}人、選択タスク: {backlogTicketValues.taskIds.join(", ")}</output>}
+            <BacklogTicketDialog
+              tasks={backlogPreviewTasks}
+              initialStartDate="2025-06-01"
+              initialEndDate="2025-06-30"
+              initialExpectedAssigneeCount={3}
+              initialSelectedTaskIds={backlogPreviewTasks.map((task) => task.id)}
+              open={isBacklogTicketDialogOpen}
+              onClose={() => setIsBacklogTicketDialogOpen(false)}
+              onSubmit={setBacklogTicketValues}
+            />
           </section>
 
           <section className="space-y-4 rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
