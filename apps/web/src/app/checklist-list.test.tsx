@@ -1,6 +1,13 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vitest"
 
+const pushMock = vi.hoisted(() => vi.fn())
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: pushMock }),
+}))
+
 import { ChecklistList } from "./checklist-list"
 
 const checklists = [
@@ -11,6 +18,7 @@ const checklists = [
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
+  pushMock.mockReset()
 })
 
 test("APIの一覧項目を表示し、名前から詳細へ遷移できる", () => {
@@ -35,4 +43,12 @@ test("名前だけで部分一致検索する", () => {
   expect(screen.getByRole("link", { name: "新入社員の受け入れ" })).toBeInTheDocument()
   expect(screen.queryByRole("link", { name: "出張の準備" })).not.toBeInTheDocument()
   expect(screen.getByText("全 1 件")).toBeInTheDocument()
+})
+
+test("行をクリックすると詳細画面へ遷移する", () => {
+  render(<ChecklistList checklists={checklists} />)
+
+  fireEvent.click(screen.getByRole("cell", { name: "6" }))
+
+  expect(pushMock).toHaveBeenCalledWith("/checklists/1")
 })

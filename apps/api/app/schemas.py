@@ -1,6 +1,11 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+TaskPriority = Literal["low", "medium", "high"]
 
 
 class ChecklistWriteRequest(BaseModel):
@@ -81,6 +86,10 @@ class ManualTaskCreateRequest(BaseModel):
         return value
 
 
+class TaskUpdateRequest(ManualTaskCreateRequest):
+    priority: TaskPriority
+
+
 class ChecklistResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,6 +106,12 @@ class TaskResponse(BaseModel):
     title: str
     summary: str | None
     estimated_hours: float
+    priority: TaskPriority
+
+
+class TaskDetailResponse(BaseModel):
+    checklist_name: str
+    task: TaskResponse
 
 
 class AIBulkTasksResponse(BaseModel):

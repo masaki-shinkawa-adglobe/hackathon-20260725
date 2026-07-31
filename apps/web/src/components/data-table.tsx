@@ -48,6 +48,7 @@ export type DataTableProps<TData> = {
   onRetry?: () => void
   emptyMessage?: React.ReactNode
   getRowKey?: (row: TData, index: number) => React.Key
+  onRowClick?: (row: TData, index: number) => void
 }
 
 function nextSortState(
@@ -75,6 +76,7 @@ function DataTable<TData>({
   onRetry,
   emptyMessage = "データがありません。",
   getRowKey,
+  onRowClick,
 }: DataTableProps<TData>) {
   const [searchInputValue, setSearchInputValue] = React.useState(
     search?.value ?? ""
@@ -217,7 +219,22 @@ function DataTable<TData>({
             </TableRow>
           ) : (
             data.map((row, index) => (
-              <TableRow key={getRowKey?.(row, index) ?? index}>
+              <TableRow
+                key={getRowKey?.(row, index) ?? index}
+                className={onRowClick ? "cursor-pointer" : undefined}
+                onClick={(event) => {
+                  if (
+                    !onRowClick ||
+                    (event.target as HTMLElement).closest(
+                      "a, button, input, select, textarea"
+                    )
+                  ) {
+                    return
+                  }
+
+                  onRowClick(row, index)
+                }}
+              >
                 {columns.map((column) => (
                   <TableCell key={column.id}>{column.cell(row)}</TableCell>
                 ))}

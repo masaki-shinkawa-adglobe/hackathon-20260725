@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { PlusIcon } from "lucide-react"
 
 import { AppBreadcrumb } from "@/components/app-breadcrumb"
@@ -48,6 +49,7 @@ const columns: DataTableColumn<ChecklistListItem>[] = [
 ]
 
 export function ChecklistList({ checklists }: { checklists: ChecklistListItem[] }) {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = React.useState("")
   const [searchInputValue, setSearchInputValue] = React.useState("")
 
@@ -93,7 +95,13 @@ export function ChecklistList({ checklists }: { checklists: ChecklistListItem[] 
 
           <section className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm [&>div]:space-y-0 [&_table]:border-collapse [&_table]:text-base [&_thead]:bg-muted/50 [&_th]:h-16 [&_th]:px-6 [&_th]:text-sm [&_th]:font-semibold [&_th]:text-muted-foreground [&_td]:px-6 [&_td]:py-6 [&_tbody_tr:last-child]:border-b-0" aria-labelledby="checklist-table-heading">
             <h1 id="checklist-table-heading" className="sr-only">チェックリスト一覧</h1>
-            <DataTable columns={columns} data={filteredChecklists} getRowKey={(checklist) => checklist.id} emptyMessage="該当するチェックリストがありません。" />
+            <DataTable
+              columns={columns}
+              data={filteredChecklists}
+              getRowKey={(checklist) => checklist.id}
+              onRowClick={(checklist) => router.push(`/checklists/${checklist.id}`)}
+              emptyMessage="該当するチェックリストがありません。"
+            />
           </section>
           <p aria-live="polite" className="mt-5 text-base font-semibold text-foreground">全 {filteredChecklists.length} 件</p>
         </main>
