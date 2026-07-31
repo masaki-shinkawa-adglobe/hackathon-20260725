@@ -48,6 +48,7 @@ export function ChecklistForm() {
           name="name"
           type="text"
           defaultValue={state.values.name}
+          maxLength={255}
           aria-describedby={state.errors.name ? "name-error" : undefined}
           aria-invalid={Boolean(state.errors.name)}
           className="mt-2 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
