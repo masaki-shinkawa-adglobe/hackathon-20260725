@@ -32,6 +32,8 @@ from app.schemas import (
     ChecklistUpdateRequest,
     ChecklistUpdateResponse,
     ChecklistsResponse,
+    ManualTaskCreateRequest,
+    TaskResponse,
 )
 
 
@@ -163,6 +165,32 @@ async def get_checklist(
         backlog_registration=backlog_registration(checklist.backlog_link),
         tasks=checklist.tasks,
     )
+
+
+@app.post(
+    "/checklists/{checklist_id}/tasks",
+    response_model=TaskResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_manual_task(
+    checklist_id: int,
+    task_request: ManualTaskCreateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> TaskResponse:
+    checklist = await session.scalar(select(Checklist).where(Checklist.id == checklist_id))
+    if checklist is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist not found")
+
+    task = Task(
+        checklist_id=checklist.id,
+        title=task_request.title,
+        summary=task_request.summary,
+        estimated_hours=task_request.estimated_hours,
+    )
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
 
 
 @app.post(
