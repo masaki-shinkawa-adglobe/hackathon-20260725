@@ -41,6 +41,7 @@ describe("UiPreviewPage", () => {
     expect(main.parentElement).toHaveClass("flex")
     expect(main.parentElement).toHaveClass("[&>[data-slot=sidebar-wrapper]]:contents")
     expect(main.parentElement).toHaveAttribute("data-slot", "sidebar-wrapper")
+    expect(main.parentElement?.querySelector('[data-slot="sidebar"]')).toBeInTheDocument()
     expect(sidebarOffset).toHaveClass("hidden", "shrink-0", "md:block", "md:w-64")
     expect(main.previousElementSibling).toBe(sidebarOffset)
   })
@@ -82,5 +83,26 @@ describe("UiPreviewPage", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "完了" }))
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+
+  it("モーダル外のチェックリストIDでAI一括登録モーダルを開ける", () => {
+    render(<UiPreviewPage />)
+
+    fireEvent.change(screen.getByLabelText("チェックリストID"), { target: { value: "42" } })
+    fireEvent.click(screen.getByRole("button", { name: "AIでタスクを一括登録" }))
+    expect(screen.getByRole("dialog")).toHaveTextContent("AIでタスクを一括登録")
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("チェックリストID")
+  })
+
+  it("AI一括登録の成功タスク一覧を表示する", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ tasks: [{ id: 1, checklist_id: 1, title: "AI作成タスク", summary: "概要", estimated_hours: 1 }] }), { status: 200 }))
+    vi.stubGlobal("fetch", fetchMock)
+    render(<UiPreviewPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: "AIでタスクを一括登録" }))
+    fireEvent.change(screen.getByLabelText("説明（任意）"), { target: { value: "説明" } })
+    fireEvent.click(screen.getByRole("button", { name: "AIで登録" }))
+
+    expect(await screen.findByText("AI作成タスク")).toBeInTheDocument()
   })
 })
