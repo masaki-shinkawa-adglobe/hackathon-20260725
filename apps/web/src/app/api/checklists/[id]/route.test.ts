@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { GET } from "./route"
+import { DELETE, GET } from "./route"
 
 const context = (id: string) => ({ params: Promise.resolve({ id }) })
 
-describe("GET /api/checklists/[id]", () => {
-  afterEach(() => {
-    delete process.env.INTERNAL_API_URL
-    vi.unstubAllGlobals()
-  })
+afterEach(() => {
+  delete process.env.INTERNAL_API_URL
+  vi.unstubAllGlobals()
+})
 
+describe("GET /api/checklists/[id]", () => {
   it("内部APIへ正しいGETを中継し、成功JSONを返す", async () => {
     process.env.INTERNAL_API_URL = "http://api:8000"
     const detail = { id: 12, name: "月次決算", description: "月ごとの締め作業", tasks: [] }
@@ -53,5 +53,41 @@ describe("GET /api/checklists/[id]", () => {
 
     expect(response.status).toBe(404)
     expect(await response.json()).toEqual({ code: "upstream_error", detail: "チェックリストの取得に失敗しました。時間をおいて再試行してください。" })
+  })
+})
+
+describe("DELETE /api/checklists/[id]", () => {
+  it("内部APIへDELETEを中継し、204を返す", async () => {
+    process.env.INTERNAL_API_URL = "http://api:8000"
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const response = await DELETE(new Request("http://localhost", { method: "DELETE" }), context("1"))
+
+    expect(response.status).toBe(204)
+    expect(await response.text()).toBe("")
+    expect(fetchMock).toHaveBeenCalledWith(new URL("http://api:8000/checklists/1"), { method: "DELETE" })
+  })
+
+  it("未設定と通信失敗を安全なエラーへ変換する", async () => {
+    const unset = await DELETE(new Request("http://localhost", { method: "DELETE" }), context("1"))
+    expect(unset.status).toBe(503)
+    expect(await unset.json()).toEqual({ code: "proxy_not_configured", detail: "チェックリストの削除に失敗しました。時間をおいて再試行してください。" })
+
+    process.env.INTERNAL_API_URL = "http://api:8000"
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("secret endpoint")))
+    const failed = await DELETE(new Request("http://localhost", { method: "DELETE" }), context("1"))
+    expect(failed.status).toBe(502)
+    expect(await failed.json()).toEqual({ code: "proxy_connection_failed", detail: expect.not.stringContaining("secret") })
+  })
+
+  it("上流エラーを安全なJSONへ変換してステータスを維持する", async () => {
+    process.env.INTERNAL_API_URL = "http://api:8000"
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "Checklist not found" }), { status: 404 })))
+
+    const response = await DELETE(new Request("http://localhost", { method: "DELETE" }), context("1"))
+
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({ code: "upstream_error", detail: "チェックリストの削除に失敗しました。時間をおいて再試行してください。" })
   })
 })

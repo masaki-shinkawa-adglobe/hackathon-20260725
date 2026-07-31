@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { AIBulkTasksDialog, type AIBulkTask } from "@/components/ai-bulk-tasks-dialog"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ChecklistDeleteDialog } from "./checklist-delete-dialog"
 
 type Task = {
   id: number
@@ -109,6 +110,7 @@ export function ChecklistDetail({ checklistId }: ChecklistDetailProps) {
               <Button asChild variant="outline">
                 <Link href={`/checklists/${checklist.id}/edit`}>編集する</Link>
               </Button>
+              <ChecklistDeleteDialog checklistId={checklist.id} />
             </div>
 
             <section className="mt-10" aria-labelledby="task-list-heading">
