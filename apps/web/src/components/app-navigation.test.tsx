@@ -17,6 +17,7 @@ vi.mock("next/navigation", () => ({
 
 import { AppBreadcrumb } from "@/components/app-breadcrumb"
 import { AppSidebar } from "@/components/app-sidebar"
+import { SidebarProvider } from "@/components/ui/sidebar"
 
 afterEach(() => {
   cleanup()
@@ -26,7 +27,11 @@ afterEach(() => {
 test("AppSidebar marks only the exact pathname as the current page", () => {
   navigationMock.pathname = "/settings"
 
-  render(<AppSidebar />)
+  render(
+    <SidebarProvider>
+      <AppSidebar />
+    </SidebarProvider>
+  )
 
   expect(
     screen.getByRole("link", { name: "管理・連携設定" })
@@ -39,7 +44,11 @@ test("AppSidebar marks only the exact pathname as the current page", () => {
 test("AppSidebar navigation links can receive keyboard focus", async () => {
   const user = userEvent.setup()
 
-  render(<AppSidebar />)
+  render(
+    <SidebarProvider>
+      <AppSidebar />
+    </SidebarProvider>
+  )
 
   await user.tab()
   await user.tab()
