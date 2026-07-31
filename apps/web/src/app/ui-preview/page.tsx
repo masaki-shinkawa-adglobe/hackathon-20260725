@@ -138,7 +138,7 @@ export default function UiPreviewPage() {
   }, [searchValue, sort, tableState])
 
   return (
-    <SidebarProvider className="flex min-h-screen bg-background text-foreground [&>[data-slot=sidebar-wrapper]]:contents">
+    <SidebarProvider className="flex min-h-screen bg-background text-foreground">
       <AppSidebar />
       <div
         aria-hidden="true"
