@@ -58,7 +58,7 @@ def client(session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[T
 
 async def create_checklist(session_factory: async_sessionmaker[AsyncSession]) -> Checklist:
     async with session_factory() as session:
-        checklist = Checklist(name="月次決算業務")
+        checklist = Checklist(name="月次決算業務", description="月次決算の標準チェックリスト")
         session.add(checklist)
         await session.commit()
         await session.refresh(checklist)
@@ -84,7 +84,11 @@ async def test_creates_generated_tasks_for_existing_checklist(
 
     assert response.status_code == 200
     assert response.json() == {
-        "checklist": {"id": checklist.id, "name": "月次決算業務"},
+        "checklist": {
+            "id": checklist.id,
+            "name": "月次決算業務",
+            "description": "月次決算の標準チェックリスト",
+        },
         "tasks": [
             {"id": 1, "checklist_id": checklist.id, "title": "仕訳を確認", "summary": "当月の仕訳を確認する", "estimated_hours": 2.0},
             {"id": 2, "checklist_id": checklist.id, "title": "試算表を作成", "summary": "試算表を出力する", "estimated_hours": 1.5},

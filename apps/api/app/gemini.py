@@ -65,7 +65,7 @@ class GeminiTaskGenerator:
 
         client = genai.Client(api_key=self._api_key)
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=os.getenv("GEMINI_MODEL", "gemini-3.6-flash"),
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json"),
         )

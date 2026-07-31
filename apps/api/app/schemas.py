@@ -17,6 +17,7 @@ class ChecklistResponse(BaseModel):
 
     id: int
     name: str
+    description: str | None
 
 
 class TaskResponse(GeneratedTask):
