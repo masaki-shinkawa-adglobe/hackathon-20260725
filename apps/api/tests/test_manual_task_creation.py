@@ -133,7 +133,7 @@ def test_summary_nullable_migration_upgrade_and_downgrade(tmp_path: Path, monkey
     config.set_main_option("sqlalchemy.url", database_url)
     monkeypatch.setenv("DATABASE_URL", database_url)
 
-    command.stamp(config, "0003")
+    command.stamp(config, "0004")
     metadata = MetaData()
     Table("checklists", metadata, Column("id", Integer, primary_key=True), Column("name", String(255), nullable=False))
     tasks = Table(
@@ -148,12 +148,12 @@ def test_summary_nullable_migration_upgrade_and_downgrade(tmp_path: Path, monkey
     engine = create_engine(f"sqlite:///{database_path}")
     metadata.create_all(engine)
 
-    command.upgrade(config, "0004")
+    command.upgrade(config, "0005")
     assert inspect(engine).get_columns("tasks")[3]["nullable"] is True
     with engine.begin() as connection:
         connection.execute(tasks.insert(), {"checklist_id": 1, "title": "手動", "summary": None, "estimated_hours": 1})
 
-    command.downgrade(config, "0003")
+    command.downgrade(config, "0004")
     assert inspect(engine).get_columns("tasks")[3]["nullable"] is False
     with engine.connect() as connection:
         assert connection.execute(select(tasks.c.summary)).scalar_one() == ""
