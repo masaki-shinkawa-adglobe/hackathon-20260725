@@ -54,6 +54,17 @@ describe("GET /api/checklists/[id]", () => {
     expect(response.status).toBe(404)
     expect(await response.json()).toEqual({ code: "upstream_error", detail: "チェックリストの取得に失敗しました。時間をおいて再試行してください。" })
   })
+
+  it("本文がnullのタスクを含む詳細も有効な応答として返す", async () => {
+    process.env.INTERNAL_API_URL = "http://api:8000"
+    const detail = { id: 12, name: "月次決算", description: null, tasks: [{ id: 1, checklist_id: 12, title: "確認", summary: null, estimated_hours: 1 }] }
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(detail), { status: 200 })))
+
+    const response = await GET(new Request("http://localhost"), context("12"))
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(detail)
+  })
 })
 
 describe("DELETE /api/checklists/[id]", () => {

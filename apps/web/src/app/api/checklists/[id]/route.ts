@@ -29,7 +29,7 @@ function isChecklistDetail(body: unknown): boolean {
         typeof value.id === "number" &&
         typeof value.checklist_id === "number" &&
         typeof value.title === "string" &&
-        typeof value.summary === "string" &&
+        (typeof value.summary === "string" || value.summary === null) &&
         typeof value.estimated_hours === "number" &&
         Number.isFinite(value.estimated_hours)
       )

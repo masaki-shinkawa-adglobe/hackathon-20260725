@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 
 import { AIBulkTasksDialog, type AIBulkTask } from "@/components/ai-bulk-tasks-dialog"
+import { ManualTaskDialog } from "@/components/manual-task-dialog"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChecklistDeleteDialog } from "./checklist-delete-dialog"
@@ -13,7 +14,7 @@ type Task = {
   id: number
   checklist_id: number
   title: string
-  summary: string
+  summary: string | null
   estimated_hours: number
 }
 
@@ -35,26 +36,39 @@ export function ChecklistDetail({ checklistId }: ChecklistDetailProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
   const [isAIBulkTasksDialogOpen, setIsAIBulkTasksDialogOpen] = useState(false)
+  const [isManualTaskDialogOpen, setIsManualTaskDialogOpen] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [hasRefreshError, setHasRefreshError] = useState(false)
 
-  const loadChecklist = useCallback(async ({ preserveOnError = false } = {}) => {
+  const loadChecklist = useCallback(async ({ preserveOnError = false, showRefreshError = false } = {}): Promise<boolean> => {
     if (!preserveOnError) {
       setIsLoading(true)
       setHasError(false)
+    } else {
+      setIsRefreshing(true)
+      if (showRefreshError) setHasRefreshError(false)
     }
 
     try {
       const response = await fetch(`/api/checklists/${encodeURIComponent(checklistId)}`)
       if (!response.ok) throw new Error("Failed to fetch checklist")
       setChecklist((await response.json()) as Checklist)
+      setHasRefreshError(false)
       return true
     } catch {
       if (!preserveOnError) {
         setChecklist(null)
         setHasError(true)
+      } else if (showRefreshError) {
+        setHasRefreshError(true)
       }
       return false
     } finally {
-      if (!preserveOnError) setIsLoading(false)
+      if (!preserveOnError) {
+        setIsLoading(false)
+      } else {
+        setIsRefreshing(false)
+      }
     }
   }, [checklistId])
 
@@ -121,8 +135,24 @@ export function ChecklistDetail({ checklistId }: ChecklistDetailProps) {
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-muted-foreground">{checklist.tasks.length}件</span>
                   <Button onClick={() => setIsAIBulkTasksDialogOpen(true)}>AIでタスクを一括登録</Button>
+                  <ManualTaskDialog
+                    checklistId={checklist.id}
+                    open={isManualTaskDialogOpen}
+                    onOpenChange={setIsManualTaskDialogOpen}
+                    onSuccess={() => loadChecklist({ preserveOnError: true, showRefreshError: true })}
+                    trigger={<Button type="button">タスク手動登録</Button>}
+                  />
                 </div>
               </div>
+              {hasRefreshError && (
+                <div className="mt-4 rounded-lg border border-destructive/30 bg-card p-4" role="alert">
+                  <p className="text-sm text-destructive">タスクは登録されましたが、一覧を更新できませんでした。</p>
+                  <Button className="mt-3" variant="outline" onClick={() => void loadChecklist({ preserveOnError: true, showRefreshError: true })} disabled={isRefreshing}>
+                    一覧を再取得
+                  </Button>
+                </div>
+              )}
+              {isRefreshing && <p className="mt-4 text-sm text-muted-foreground" role="status">タスク一覧を更新中...</p>}
               {checklist.tasks.length === 0 ? (
                 <p className="mt-4 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-8 text-center text-sm text-muted-foreground">
                   タスクはまだ登録されていません
@@ -151,7 +181,7 @@ export function ChecklistDetail({ checklistId }: ChecklistDetailProps) {
                             </Link>
                           </TableCell>
                           <TableCell className="whitespace-normal text-muted-foreground">
-                            {task.summary}
+                            {task.summary || "—"}
                           </TableCell>
                           <TableCell className="text-right">
                             {task.estimated_hours}時間
