@@ -5,8 +5,9 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
 from starlette.datastructures import UploadFile
 
 from app.database import engine, get_session
@@ -18,9 +19,16 @@ from app.gemini import (
     TaskSource,
     get_task_generator,
 )
-from app.models import Checklist, Task
+from app.models import Checklist, ChecklistBacklogLink, Task
 from app.file_processing import FileValidationError, process_upload, read_upload_with_limit
-from app.schemas import AIBulkTasksResponse, AIBulkTasksUploadRequest
+from app.schemas import (
+    AIBulkTasksResponse,
+    AIBulkTasksUploadRequest,
+    BacklogRegistrationResponse,
+    ChecklistDetailResponse,
+    ChecklistListItemResponse,
+    ChecklistsResponse,
+)
 
 
 @asynccontextmanager
@@ -32,12 +40,80 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(lifespan=lifespan)
 
 
+def backlog_registration(link: ChecklistBacklogLink | None) -> BacklogRegistrationResponse:
+    if link is None:
+        return BacklogRegistrationResponse(
+            is_registered=False,
+            link_id=None,
+            backlog_issue_id=None,
+            backlog_issue_key=None,
+            backlog_issue_url=None,
+        )
+    return BacklogRegistrationResponse(
+        is_registered=True,
+        link_id=link.id,
+        backlog_issue_id=link.backlog_issue_id,
+        backlog_issue_key=link.backlog_issue_key,
+        backlog_issue_url=link.backlog_issue_url,
+    )
+
+
 @app.get("/health")
 async def health(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, str]:
     await session.execute(text("SELECT 1"))
     return {"status": "ok"}
+
+
+@app.get("/checklists", response_model=ChecklistsResponse)
+async def list_checklists(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ChecklistsResponse:
+    task_counts = (
+        select(Task.checklist_id, func.count(Task.id).label("task_count"))
+        .group_by(Task.checklist_id)
+        .subquery()
+    )
+    result = await session.execute(
+        select(Checklist, task_counts.c.task_count, ChecklistBacklogLink)
+        .outerjoin(task_counts, task_counts.c.checklist_id == Checklist.id)
+        .outerjoin(ChecklistBacklogLink, ChecklistBacklogLink.checklist_id == Checklist.id)
+        .order_by(Checklist.id)
+    )
+    return ChecklistsResponse(
+        checklists=[
+            ChecklistListItemResponse(
+                id=checklist.id,
+                name=checklist.name,
+                task_count=task_count or 0,
+                backlog_registration=backlog_registration(link),
+                updated_at=checklist.updated_at,
+            )
+            for checklist, task_count, link in result.all()
+        ]
+    )
+
+
+@app.get("/checklists/{checklist_id}", response_model=ChecklistDetailResponse)
+async def get_checklist(
+    checklist_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ChecklistDetailResponse:
+    checklist = await session.scalar(
+        select(Checklist)
+        .options(joinedload(Checklist.backlog_link), selectinload(Checklist.tasks))
+        .where(Checklist.id == checklist_id)
+    )
+    if checklist is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist not found")
+    return ChecklistDetailResponse(
+        id=checklist.id,
+        name=checklist.name,
+        description=checklist.description,
+        backlog_registration=backlog_registration(checklist.backlog_link),
+        tasks=checklist.tasks,
+    )
 
 
 @app.post(

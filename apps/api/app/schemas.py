@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -36,4 +38,29 @@ class TaskResponse(GeneratedTask):
 
 class AIBulkTasksResponse(BaseModel):
     checklist: ChecklistResponse
+    tasks: list[TaskResponse]
+
+
+class BacklogRegistrationResponse(BaseModel):
+    is_registered: bool
+    link_id: int | None
+    backlog_issue_id: int | None
+    backlog_issue_key: str | None
+    backlog_issue_url: str | None
+
+
+class ChecklistListItemResponse(BaseModel):
+    id: int
+    name: str
+    task_count: int
+    backlog_registration: BacklogRegistrationResponse
+    updated_at: datetime
+
+
+class ChecklistsResponse(BaseModel):
+    checklists: list[ChecklistListItemResponse]
+
+
+class ChecklistDetailResponse(ChecklistResponse):
+    backlog_registration: BacklogRegistrationResponse
     tasks: list[TaskResponse]
