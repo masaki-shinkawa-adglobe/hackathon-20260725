@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from dataclasses import dataclass
 from typing import Protocol
 
 from pydantic import TypeAdapter, ValidationError
@@ -20,9 +21,16 @@ class GeminiResponseError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class TaskSource:
+    text: str | None = None
+    document: bytes | None = None
+    document_mime_type: str | None = None
+
+
 class TaskGenerator(Protocol):
     async def generate_tasks(
-        self, *, checklist_name: str, description: str | None
+        self, *, checklist_name: str, description: str | None = None, source: TaskSource | None = None
     ) -> list[GeneratedTask]: ...
 
 
@@ -31,17 +39,18 @@ class GeminiTaskGenerator:
         self._api_key = api_key
 
     async def generate_tasks(
-        self, *, checklist_name: str, description: str | None
+        self, *, checklist_name: str, description: str | None = None, source: TaskSource | None = None
     ) -> list[GeneratedTask]:
         prompt = (
             "次のチェックリストを実行可能な複数タスクへ分解してください。"
             "JSON配列だけを返してください。各要素は title, summary, estimated_hours "
             "（時間、正の数値）を必須とします。\n"
             f"チェックリスト名: {checklist_name}\n"
-            f"補足説明: {description or 'なし'}"
+            f"補足説明: {description or 'なし'}\n"
+            f"添付ファイルから抽出した内容: {source.text if source and source.text else 'なし'}"
         )
         try:
-            response_text = await asyncio.to_thread(self._request, prompt)
+            response_text = await asyncio.to_thread(self._request, prompt, source)
         except (GeminiConfigurationError, GeminiResponseError):
             raise
         except Exception as error:
@@ -56,7 +65,7 @@ class GeminiTaskGenerator:
             raise GeminiResponseError("Gemini returned an empty task list")
         return tasks
 
-    def _request(self, prompt: str) -> str:
+    def _request(self, prompt: str, source: TaskSource | None = None) -> str:
         try:
             from google import genai
             from google.genai import types
@@ -64,9 +73,15 @@ class GeminiTaskGenerator:
             raise GeminiConfigurationError("Gemini SDK is not installed") from error
 
         client = genai.Client(api_key=self._api_key)
+        contents: str | list[object] = prompt
+        if source and source.document:
+            contents = [
+                prompt,
+                types.Part.from_bytes(data=source.document, mime_type=source.document_mime_type or "application/pdf"),
+            ]
         response = client.models.generate_content(
             model=os.getenv("GEMINI_MODEL", "gemini-3.6-flash"),
-            contents=prompt,
+            contents=contents,
             config=types.GenerateContentConfig(response_mime_type="application/json"),
         )
         if not response.text:
@@ -76,13 +91,13 @@ class GeminiTaskGenerator:
 
 class EnvironmentGeminiTaskGenerator:
     async def generate_tasks(
-        self, *, checklist_name: str, description: str | None
+        self, *, checklist_name: str, description: str | None = None, source: TaskSource | None = None
     ) -> list[GeneratedTask]:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise GeminiConfigurationError("GEMINI_API_KEY is not configured")
         return await GeminiTaskGenerator(api_key).generate_tasks(
-            checklist_name=checklist_name, description=description
+            checklist_name=checklist_name, description=description, source=source
         )
 
 

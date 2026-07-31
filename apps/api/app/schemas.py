@@ -1,9 +1,16 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class AIBulkTasksRequest(BaseModel):
+class AIBulkTasksUploadRequest(BaseModel):
     checklist_id: int
     description: str | None = Field(default=None, max_length=10_000)
+
+    @field_validator("description")
+    @classmethod
+    def normalize_blank_description(cls, value: str | None) -> str | None:
+        if value is None or value.strip() == "":
+            return None
+        return value
 
 
 class GeneratedTask(BaseModel):
