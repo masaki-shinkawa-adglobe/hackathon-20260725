@@ -105,7 +105,8 @@ async def list_checklists(
                 id=checklist.id,
                 name=checklist.name,
                 task_count=task_count or 0,
-                backlog_registration=backlog_registration(link),
+                assignee_count=checklist.assignee_count,
+                backlog_last_registered_at=link.registered_at if link else None,
                 updated_at=checklist.updated_at,
             )
             for checklist, task_count, link in result.all()
@@ -160,6 +161,7 @@ async def get_checklist(
         id=checklist.id,
         name=checklist.name,
         description=checklist.description,
+        assignee_count=checklist.assignee_count,
         backlog_registration=backlog_registration(checklist.backlog_link),
         tasks=checklist.tasks,
     )

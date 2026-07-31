@@ -87,7 +87,8 @@ class ChecklistListItemResponse(BaseModel):
     id: int
     name: str
     task_count: int
-    backlog_registration: BacklogRegistrationResponse
+    assignee_count: int
+    backlog_last_registered_at: datetime | None
     updated_at: datetime
 
 
@@ -96,5 +97,6 @@ class ChecklistsResponse(BaseModel):
 
 
 class ChecklistDetailResponse(ChecklistResponse):
+    assignee_count: int
     backlog_registration: BacklogRegistrationResponse
     tasks: list[TaskResponse]
