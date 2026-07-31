@@ -19,23 +19,10 @@ DELETE /checklists/{checklist_id}
 ## 成功レスポンス
 
 ```http
-HTTP/1.1 200 OK
-Content-Type: application/json
+HTTP/1.1 204 No Content
 ```
 
-```json
-{
-  "id": 1,
-  "deleted_task_ids": [1, 2]
-}
-```
-
-## 主要フィールド
-
-| フィールド | 型 | 説明 |
-| --- | --- | --- |
-| `id` | integer | 削除したチェックリストID |
-| `deleted_task_ids` | integer[] | 削除した紐づきタスクIDの一覧。タスクがない場合は空配列 |
+成功時のレスポンス本文は返さない。
 
 ## エラーレスポンス
 

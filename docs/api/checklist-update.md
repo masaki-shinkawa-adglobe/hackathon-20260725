@@ -26,7 +26,7 @@ Content-Type: application/json
 
 | フィールド | 型 | 必須 | 制約 | 説明 |
 | --- | --- | --- | --- | --- |
-| `name` | string | 必須 | 1〜255文字 | チェックリスト名 |
+| `name` | string | 必須 | 1〜255文字、空白のみ不可 | チェックリスト名 |
 | `description` | string \| null | 任意 | 空文字列を許容 | チェックリストの説明 |
 | `assignee_count` | integer | 必須 | 1以上 | 担当者人数 |
 | `backlog_project_key_or_url` | string \| null | 任意 | 自由入力 | BacklogのプロジェクトキーまたはURL |

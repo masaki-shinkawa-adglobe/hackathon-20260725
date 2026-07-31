@@ -66,6 +66,29 @@ async def add_backlog_link(session_factory: async_sessionmaker[AsyncSession], ch
         return link
 
 
+def test_checklist_configuration_migration_upgrade_and_downgrade() -> None:
+    migration_path = Path(__file__).parents[1] / "migrations/versions/0005_add_checklist_configuration.py"
+    spec = importlib.util.spec_from_file_location("migration_0005", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE checklists (id INTEGER PRIMARY KEY)")
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        columns = {column["name"]: column for column in inspect(connection).get_columns("checklists")}
+        assert set(columns) == {"id", "assignee_count", "backlog_project_key_or_url"}
+        assert not columns["assignee_count"]["nullable"]
+        assert columns["assignee_count"]["default"] == "1"
+        assert columns["backlog_project_key_or_url"]["nullable"]
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.downgrade()
+        assert {column["name"] for column in inspect(connection).get_columns("checklists")} == {"id"}
+    engine.dispose()
+
+
 def test_backlog_link_migration_upgrade_and_downgrade() -> None:
     migration_path = Path(__file__).parents[1] / "migrations/versions/0004_add_checklist_backlog_links.py"
     spec = importlib.util.spec_from_file_location("migration_0004", migration_path)
@@ -113,6 +136,129 @@ async def test_backlog_link_is_unique_and_deleted_with_checklist(
 
 def test_list_checklists_returns_empty(client: TestClient) -> None:
     assert client.get("/checklists").json() == {"checklists": []}
+
+
+@pytest.mark.asyncio
+async def test_create_checklist_returns_created_checklist_and_persists_optional_values(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    response = client.post(
+        "/checklists",
+        json={
+            "name": "リリース準備",
+            "description": "",
+            "backlog_project_key_or_url": "自由入力のプロジェクト情報",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "id": 1,
+        "name": "リリース準備",
+        "description": "",
+        "backlog_project_key_or_url": "自由入力のプロジェクト情報",
+    }
+    async with session_factory() as session:
+        checklist = await session.get(Checklist, 1)
+        assert checklist is not None
+        assert checklist.assignee_count == 1
+        assert checklist.description == ""
+        assert checklist.backlog_project_key_or_url == "自由入力のプロジェクト情報"
+
+
+def test_create_checklist_allows_null_optional_values(client: TestClient) -> None:
+    response = client.post("/checklists", json={"name": "下書き", "description": None})
+
+    assert response.status_code == 201
+    assert response.json()["description"] is None
+    assert response.json()["backlog_project_key_or_url"] is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{}, {"name": ""}, {"name": "   "}, {"name": "a" * 256}],
+)
+def test_create_checklist_rejects_invalid_name(client: TestClient, payload: dict[str, str]) -> None:
+    assert client.post("/checklists", json=payload).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_checklist_returns_updated_checklist_and_persists_values(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    checklist = await add_checklist(session_factory)
+    response = client.patch(
+        f"/checklists/{checklist.id}",
+        json={
+            "name": "月次決算（改訂）",
+            "description": "",
+            "assignee_count": 3,
+            "backlog_project_key_or_url": "https://example.backlog.com/projects/PROJ",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": checklist.id,
+        "name": "月次決算（改訂）",
+        "description": "",
+        "assignee_count": 3,
+        "backlog_project_key_or_url": "https://example.backlog.com/projects/PROJ",
+    }
+    async with session_factory() as session:
+        updated = await session.get(Checklist, checklist.id)
+        assert updated is not None
+        assert updated.assignee_count == 3
+        assert updated.backlog_project_key_or_url == "https://example.backlog.com/projects/PROJ"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"name": "有効", "assignee_count": 0},
+        {"name": "有効", "assignee_count": -1},
+        {"name": "有効", "assignee_count": 1.0},
+        {"name": "有効", "assignee_count": 1.5},
+        {"name": "   ", "assignee_count": 1},
+    ],
+)
+def test_update_checklist_rejects_invalid_input(client: TestClient, payload: dict[str, object]) -> None:
+    assert client.patch("/checklists/1", json=payload).status_code == 422
+
+
+def test_update_checklist_returns_not_found(client: TestClient) -> None:
+    response = client.patch("/checklists/999", json={"name": "有効", "assignee_count": 1})
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Checklist not found"}
+
+
+@pytest.mark.asyncio
+async def test_delete_checklist_removes_local_records_without_response_body(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    checklist = await add_checklist(session_factory)
+    await add_backlog_link(session_factory, checklist.id)
+    async with session_factory() as session:
+        session.add(Task(checklist_id=checklist.id, title="ローカルタスク", summary="削除対象", estimated_hours=1))
+        await session.commit()
+
+    response = client.delete(f"/checklists/{checklist.id}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    async with session_factory() as session:
+        assert await session.get(Checklist, checklist.id) is None
+        assert await session.scalar(select(Task).where(Task.checklist_id == checklist.id)) is None
+        assert await session.scalar(
+            select(ChecklistBacklogLink).where(ChecklistBacklogLink.checklist_id == checklist.id)
+        ) is None
+
+
+def test_delete_checklist_returns_not_found(client: TestClient) -> None:
+    response = client.delete("/checklists/999")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Checklist not found"}
 
 
 @pytest.mark.asyncio

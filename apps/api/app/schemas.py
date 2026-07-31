@@ -3,6 +3,40 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class ChecklistWriteRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+    backlog_project_key_or_url: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def reject_blank_name(cls, value: str) -> str:
+        if value.strip() == "":
+            raise ValueError("Name must not be blank")
+        return value
+
+
+class ChecklistCreateRequest(ChecklistWriteRequest):
+    pass
+
+
+class ChecklistUpdateRequest(ChecklistWriteRequest):
+    assignee_count: int = Field(ge=1, strict=True)
+
+
+class ChecklistCreateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None
+    backlog_project_key_or_url: str | None
+
+
+class ChecklistUpdateResponse(ChecklistCreateResponse):
+    assignee_count: int
+
+
 class AIBulkTasksUploadRequest(BaseModel):
     checklist_id: int
     description: str | None = Field(default=None, max_length=10_000)
