@@ -17,9 +17,8 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 type Checklist = {
   id: string
   name: string
-  description: string
-  completedItemCount: number
-  totalItemCount: number
+  taskCount: number
+  backlogLastRegisteredAt: string
   updatedAt: string
 }
 
@@ -27,25 +26,22 @@ const checklists: Checklist[] = [
   {
     id: "business-trip",
     name: "出張の準備",
-    description: "来週の大阪出張に必要な持ち物と手配を確認します。",
-    completedItemCount: 4,
-    totalItemCount: 6,
+    taskCount: 6,
+    backlogLastRegisteredAt: "2026年7月30日 13:45",
     updatedAt: "2026年7月30日 14:30",
   },
   {
     id: "new-employee",
     name: "新入社員の受け入れ",
-    description: "入社初日に必要なアカウント発行と備品準備の一覧です。",
-    completedItemCount: 7,
-    totalItemCount: 8,
+    taskCount: 8,
+    backlogLastRegisteredAt: "2026年7月29日 09:50",
     updatedAt: "2026年7月29日 10:15",
   },
   {
     id: "monthly-closing",
     name: "月次締め作業",
-    description: "経費精算とレポート提出の進捗を管理します。",
-    completedItemCount: 2,
-    totalItemCount: 5,
+    taskCount: 5,
+    backlogLastRegisteredAt: "2026年7月28日 16:30",
     updatedAt: "2026年7月28日 17:45",
   },
 ]
@@ -59,35 +55,24 @@ const columns: DataTableColumn<Checklist>[] = [
     ),
   },
   {
-    id: "description",
-    header: "説明",
+    id: "taskCount",
+    header: "登録タスク数",
     cell: (checklist) => (
-      <span className="whitespace-normal text-muted-foreground">
-        {checklist.description}
-      </span>
+      <span className="block text-right tabular-nums">{checklist.taskCount}</span>
     ),
   },
   {
-    id: "completedItemCount",
-    header: "完了済み項目数",
+    id: "backlogLastRegisteredAt",
+    header: "Backlog最終登録日時",
     cell: (checklist) => (
-      <span className="block text-right tabular-nums">
-        {checklist.completedItemCount}
-      </span>
-    ),
-  },
-  {
-    id: "totalItemCount",
-    header: "総項目数",
-    cell: (checklist) => (
-      <span className="block text-right tabular-nums">
-        {checklist.totalItemCount}
+      <span className="text-muted-foreground">
+        {checklist.backlogLastRegisteredAt}
       </span>
     ),
   },
   {
     id: "updatedAt",
-    header: "更新日時",
+    header: "最終更新日時",
     cell: (checklist) => (
       <span className="text-muted-foreground">{checklist.updatedAt}</span>
     ),
@@ -108,9 +93,7 @@ export default function Home() {
 
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase("ja-JP")
   const filteredChecklists = checklists.filter((checklist) =>
-    [checklist.name, checklist.description].some((value) =>
-      value.toLocaleLowerCase("ja-JP").includes(normalizedQuery)
-    )
+    checklist.name.toLocaleLowerCase("ja-JP").includes(normalizedQuery)
   )
 
   return (
@@ -146,7 +129,7 @@ export default function Home() {
                 id="checklist-search"
                 type="search"
                 value={searchInputValue}
-                placeholder="チェックリスト名または説明で検索"
+                placeholder="チェックリスト名で検索"
                 onChange={(event) => setSearchInputValue(event.target.value)}
                 aria-label="検索"
                 className="h-15 px-4 text-base"
