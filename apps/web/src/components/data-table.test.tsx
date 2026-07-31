@@ -36,6 +36,24 @@ describe("DataTable", () => {
     expect(screen.getByText("花子")).toBeInTheDocument()
   })
 
+  it("データ行のクリックを通知する", () => {
+    const onRowClick = vi.fn()
+    render(
+      <DataTable
+        columns={columns}
+        data={[{ id: "1", name: "太郎", age: 20 }]}
+        onRowClick={onRowClick}
+      />
+    )
+
+    fireEvent.click(screen.getByRole("cell", { name: "20" }))
+
+    expect(onRowClick).toHaveBeenCalledWith(
+      { id: "1", name: "太郎", age: 20 },
+      0
+    )
+  })
+
   it("検索入力を300msデバウンスし、最新値と対象列だけを通知する", () => {
     vi.useFakeTimers()
     const onChange = vi.fn()

@@ -1,11 +1,19 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vitest"
 
+const pushMock = vi.hoisted(() => vi.fn())
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: pushMock }),
+}))
+
 import Home from "./page"
 
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
+  pushMock.mockReset()
 })
 
 test("チェックリスト一覧の全列見出しとモックデータを表示する", () => {
@@ -23,6 +31,10 @@ test("チェックリスト一覧の全列見出しとモックデータを表�
   ])
 
   const businessTripRow = screen.getByRole("row", { name: /出張の準備/ })
+  expect(within(businessTripRow).getByRole("link", { name: "出張の準備" })).toHaveAttribute(
+    "href",
+    "/checklists/business-trip"
+  )
   expect(within(businessTripRow).getByRole("cell", { name: "出張の準備" })).toBeInTheDocument()
   expect(within(businessTripRow).getByRole("cell", { name: "6" })).toBeInTheDocument()
   expect(within(businessTripRow).getByRole("cell", { name: "2026年7月30日 13:45" })).toBeInTheDocument()
@@ -39,6 +51,14 @@ test("チェックリスト一覧の全列見出しとモックデータを表�
   expect(within(monthlyClosingRow).getByRole("cell", { name: "5" })).toBeInTheDocument()
   expect(within(monthlyClosingRow).getByRole("cell", { name: "2026年7月28日 16:30" })).toBeInTheDocument()
   expect(within(monthlyClosingRow).getByRole("cell", { name: "2026年7月28日 17:45" })).toBeInTheDocument()
+})
+
+test("チェックリストの行をクリックすると詳細画面へ遷移する", () => {
+  render(<Home />)
+
+  fireEvent.click(screen.getByRole("cell", { name: "6" }))
+
+  expect(pushMock).toHaveBeenCalledWith("/checklists/business-trip")
 })
 
 test("名前の部分一致で該当するチェックリストだけを表示する", () => {

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { PlusIcon } from "lucide-react"
 
 import { AppBreadcrumb } from "@/components/app-breadcrumb"
@@ -51,7 +52,12 @@ const columns: DataTableColumn<Checklist>[] = [
     id: "name",
     header: "チェックリスト名",
     cell: (checklist) => (
-      <span className="font-medium text-foreground">{checklist.name}</span>
+      <Link
+        href={`/checklists/${checklist.id}`}
+        className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:underline"
+      >
+        {checklist.name}
+      </Link>
     ),
   },
   {
@@ -80,6 +86,7 @@ const columns: DataTableColumn<Checklist>[] = [
 ]
 
 export default function Home() {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = React.useState("")
   const [searchInputValue, setSearchInputValue] = React.useState("")
 
@@ -148,6 +155,9 @@ export default function Home() {
               columns={columns}
               data={filteredChecklists}
               getRowKey={(checklist) => checklist.id}
+              onRowClick={(checklist) =>
+                router.push(`/checklists/${checklist.id}`)
+              }
               emptyMessage="該当するチェックリストがありません。"
             />
           </section>
