@@ -11,6 +11,10 @@ afterEach(() => {
 test("チェックリスト一覧の全列見出しとモックデータを表示する", () => {
   render(<Home />)
 
+  expect(screen.getByRole("heading", { name: "チェックリスト一覧", level: 1 })).toBeInTheDocument()
+  expect(screen.getByText("キーワード")).toBeInTheDocument()
+  expect(screen.getByRole("link", { name: "新規作成" })).toHaveAttribute("href", "/checklists/new")
+  expect(screen.getByText("全 3 件")).toBeInTheDocument()
   expect(screen.getByRole("columnheader", { name: "チェックリスト名" })).toHaveAttribute("scope", "col")
   expect(screen.getByRole("columnheader", { name: "説明" })).toHaveAttribute("scope", "col")
   expect(screen.getByRole("columnheader", { name: "完了済み項目数" })).toHaveAttribute("scope", "col")
@@ -53,6 +57,7 @@ test("名前または説明の部分一致で該当するチェックリスト�
   expect(screen.getByRole("cell", { name: "新入社員の受け入れ" })).toBeInTheDocument()
   expect(screen.queryByRole("cell", { name: "出張の準備" })).not.toBeInTheDocument()
   expect(screen.queryByRole("cell", { name: "月次締め作業" })).not.toBeInTheDocument()
+  expect(screen.getByText("全 1 件")).toBeInTheDocument()
 })
 
 test("一致しない検索語では空状態を表示する", () => {
@@ -67,4 +72,5 @@ test("一致しない検索語では空状態を表示する", () => {
   })
 
   expect(screen.getByText("該当するチェックリストがありません。")).toBeInTheDocument()
+  expect(screen.getByText("全 0 件")).toBeInTheDocument()
 })
