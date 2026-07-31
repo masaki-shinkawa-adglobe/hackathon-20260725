@@ -159,7 +159,7 @@ function DataTable<TData>({
                 : undefined
 
               return (
-                <TableHead key={column.id} aria-sort={ariaSort}>
+                <TableHead key={column.id} scope="col" aria-sort={ariaSort}>
                   {column.sortable ? (
                     <Button
                       type="button"

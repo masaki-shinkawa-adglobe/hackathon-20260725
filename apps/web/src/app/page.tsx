@@ -1,130 +1,135 @@
-type HealthResult =
-  | { ok: true }
-  | {
-      ok: false;
-      message: string;
-    };
+"use client"
 
-export const dynamic = "force-dynamic";
+import * as React from "react"
 
-async function getHealth(): Promise<HealthResult> {
-  const internalApiUrl = process.env.INTERNAL_API_URL;
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/data-table"
 
-  if (!internalApiUrl) {
-    return {
-      ok: false,
-      message: "内部 API の接続先が設定されていません。",
-    };
-  }
-
-  try {
-    const response = await fetch(new URL("/health", internalApiUrl), {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        message: `ヘルスチェックが HTTP ${response.status} を返しました。`,
-      };
-    }
-
-    const body: unknown = await response.json();
-    if (
-      typeof body !== "object" ||
-      body === null ||
-      !("status" in body) ||
-      body.status !== "ok"
-    ) {
-      return {
-        ok: false,
-        message: "ヘルスチェックの応答が正常ではありません。",
-      };
-    }
-
-    return { ok: true };
-  } catch {
-    return {
-      ok: false,
-      message: "内部 API へ接続できないか、応答を読み取れませんでした。",
-    };
-  }
+type Checklist = {
+  id: string
+  name: string
+  description: string
+  completedItemCount: number
+  totalItemCount: number
+  updatedAt: string
 }
 
-function StatusCard({
-  name,
-  healthy,
-  description,
-}: {
-  name: string;
-  healthy: boolean;
-  description: string;
-}) {
-  return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-xl font-semibold text-slate-900">{name}</h2>
-        <span
-          className={`rounded-full px-3 py-1 text-sm font-medium ${
-            healthy
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-rose-100 text-rose-800"
-          }`}
-        >
-          {healthy ? "正常" : "異常"}
-        </span>
-      </div>
-      <p className="mt-4 text-sm leading-6 text-slate-600">{description}</p>
-    </article>
-  );
-}
+const checklists: Checklist[] = [
+  {
+    id: "business-trip",
+    name: "出張の準備",
+    description: "来週の大阪出張に必要な持ち物と手配を確認します。",
+    completedItemCount: 4,
+    totalItemCount: 6,
+    updatedAt: "2026年7月30日 14:30",
+  },
+  {
+    id: "new-employee",
+    name: "新入社員の受け入れ",
+    description: "入社初日に必要なアカウント発行と備品準備の一覧です。",
+    completedItemCount: 7,
+    totalItemCount: 8,
+    updatedAt: "2026年7月29日 10:15",
+  },
+  {
+    id: "monthly-closing",
+    name: "月次締め作業",
+    description: "経費精算とレポート提出の進捗を管理します。",
+    completedItemCount: 2,
+    totalItemCount: 5,
+    updatedAt: "2026年7月28日 17:45",
+  },
+]
 
-export default async function Home() {
-  const health = await getHealth();
+const columns: DataTableColumn<Checklist>[] = [
+  {
+    id: "name",
+    header: "チェックリスト名",
+    cell: (checklist) => (
+      <span className="font-medium text-foreground">{checklist.name}</span>
+    ),
+  },
+  {
+    id: "description",
+    header: "説明",
+    cell: (checklist) => (
+      <span className="whitespace-normal text-muted-foreground">
+        {checklist.description}
+      </span>
+    ),
+  },
+  {
+    id: "completedItemCount",
+    header: "完了済み項目数",
+    cell: (checklist) => (
+      <span className="block text-right tabular-nums">
+        {checklist.completedItemCount}
+      </span>
+    ),
+  },
+  {
+    id: "totalItemCount",
+    header: "総項目数",
+    cell: (checklist) => (
+      <span className="block text-right tabular-nums">
+        {checklist.totalItemCount}
+      </span>
+    ),
+  },
+  {
+    id: "updatedAt",
+    header: "更新日時",
+    cell: (checklist) => (
+      <span className="text-muted-foreground">{checklist.updatedAt}</span>
+    ),
+  },
+]
+
+export default function Home() {
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase("ja-JP")
+  const filteredChecklists = checklists.filter((checklist) =>
+    [checklist.name, checklist.description].some((value) =>
+      value.toLocaleLowerCase("ja-JP").includes(normalizedQuery)
+    )
+  )
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl items-center px-6 py-16">
-      <div className="w-full">
-        <p className="text-sm font-semibold tracking-widest text-blue-700 uppercase">
-          Local development
+    <main className="min-h-screen bg-muted/30 px-10 py-14">
+      <div className="mx-auto w-full max-w-6xl">
+        <p className="text-sm font-semibold tracking-widest text-muted-foreground uppercase">
+          Checklists
         </p>
-        <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
-          開発環境ステータス
+        <h1 className="mt-3 text-4xl font-bold tracking-tight text-foreground">
+          チェックリスト一覧
         </h1>
-        <p className="mt-4 max-w-2xl leading-7 text-slate-600">
-          Next.js の Server Component からバックエンドの疎通状態を確認しています。
+        <p className="mt-4 text-base text-muted-foreground">
+          保存したチェックリストの進捗を確認できます。
         </p>
 
-        {!health.ok && (
-          <div
-            role="alert"
-            className="mt-8 rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-900"
-          >
-            {health.message}
-          </div>
-        )}
-
-        <section className="mt-8 grid gap-5 md:grid-cols-2">
-          <StatusCard
-            name="FastAPI"
-            healthy={health.ok}
-            description={
-              health.ok
-                ? "GET /health が正常に応答しています。"
-                : "API の正常な応答を確認できません。"
-            }
-          />
-          <StatusCard
-            name="PostgreSQL"
-            healthy={health.ok}
-            description={
-              health.ok
-                ? "FastAPI のヘルスチェックを通じて接続を確認しました。"
-                : "データベース接続の正常性を確認できません。"
-            }
+        <section
+          className="mt-8 overflow-hidden rounded-xl border bg-card p-4 shadow-sm"
+          aria-labelledby="checklist-table-heading"
+        >
+          <h2 id="checklist-table-heading" className="sr-only">
+            チェックリスト一覧
+          </h2>
+          <DataTable
+            columns={columns}
+            data={filteredChecklists}
+            getRowKey={(checklist) => checklist.id}
+            search={{
+              value: searchQuery,
+              columns: ["name", "description"],
+              placeholder: "チェックリスト名または説明で検索",
+              onChange: (value) => setSearchQuery(value),
+            }}
+            emptyMessage="該当するチェックリストがありません。"
           />
         </section>
       </div>
     </main>
-  );
+  )
 }

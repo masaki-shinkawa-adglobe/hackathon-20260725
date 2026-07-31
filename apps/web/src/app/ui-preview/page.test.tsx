@@ -40,7 +40,7 @@ describe("UiPreviewPage", () => {
     expect(main).not.toHaveClass("md:ml-[var(--sidebar-width)]")
     expect(main.parentElement).toHaveClass("flex")
     expect(main.parentElement).toHaveClass("[&>[data-slot=sidebar-wrapper]]:contents")
-    expect(main.parentElement?.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument()
+    expect(main.parentElement).toHaveAttribute("data-slot", "sidebar-wrapper")
     expect(sidebarOffset).toHaveClass("hidden", "shrink-0", "md:block", "md:w-64")
     expect(main.previousElementSibling).toBe(sidebarOffset)
   })

@@ -12,6 +12,7 @@ import {
 } from "@/components/data-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SidebarProvider } from "@/components/ui/sidebar"
 
 type PreviewRow = {
   id: string
@@ -93,7 +94,7 @@ export default function UiPreviewPage() {
   }, [searchValue, sort, tableState])
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground [&>[data-slot=sidebar-wrapper]]:contents">
+    <SidebarProvider className="flex min-h-screen bg-background text-foreground [&>[data-slot=sidebar-wrapper]]:contents">
       <AppSidebar />
       <div
         aria-hidden="true"
@@ -168,6 +169,6 @@ export default function UiPreviewPage() {
           </section>
         </div>
       </main>
-    </div>
+    </SidebarProvider>
   )
 }
