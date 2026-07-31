@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 TaskPriority = Literal["low", "medium", "high"]
@@ -67,6 +67,54 @@ class GeneratedTask(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     summary: str = Field(min_length=1)
     estimated_hours: float = Field(gt=0, allow_inf_nan=False)
+
+
+class BacklogPlanCreateRequest(BaseModel):
+    task_ids: list[int] = Field(min_length=1)
+    start_date: date
+    end_date: date
+    expected_assignee_count: int = Field(ge=1, strict=True)
+
+    @field_validator("task_ids")
+    @classmethod
+    def reject_duplicate_task_ids(cls, value: list[int]) -> list[int]:
+        if len(value) != len(set(value)):
+            raise ValueError("task_ids must not contain duplicates")
+        return value
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "BacklogPlanCreateRequest":
+        if self.end_date < self.start_date:
+            raise ValueError("end_date must not be before start_date")
+        return self
+
+
+class GeneratedScheduleItem(BaseModel):
+    task_id: int
+    assignee_slot: int
+    start_date: date
+    due_date: date
+    depends_on_task_ids: list[int] = Field(default_factory=list)
+
+
+class BacklogPlanItemResponse(BaseModel):
+    task_id: int
+    title: str
+    estimated_hours: float
+    assignee_slot: int
+    start_date: date
+    due_date: date
+    depends_on_task_ids: list[int]
+
+
+class BacklogPlanCreateResponse(BaseModel):
+    plan_id: int
+    checklist_id: int
+    status: Literal["planned"]
+    start_date: date
+    end_date: date
+    expected_assignee_count: int
+    items: list[BacklogPlanItemResponse]
 
 
 class ManualTaskCreateRequest(BaseModel):
