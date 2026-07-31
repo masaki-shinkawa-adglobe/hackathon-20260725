@@ -26,6 +26,7 @@ Content-Type: application/json
   "id": 1,
   "name": "月次決算業務",
   "description": "月次決算の標準チェックリスト",
+  "assignee_count": 3,
   "backlog_registration": {
     "is_registered": true,
     "link_id": 10,
@@ -52,6 +53,7 @@ Content-Type: application/json
 | `id` | integer | チェックリストID。画面で非表示でも後続操作に使用する |
 | `name` | string | チェックリスト名 |
 | `description` | string \| null | チェックリストの説明 |
+| `assignee_count` | integer | チェックリストの想定担当者数 |
 | `backlog_registration.is_registered` | boolean | Backlog課題と紐づいているか |
 | `backlog_registration.link_id` | integer \| null | チェックリストBacklog紐づきID。未登録時は `null` |
 | `backlog_registration.backlog_issue_id` | integer \| null | Backlog課題ID。未登録時は `null` |
