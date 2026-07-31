@@ -14,13 +14,17 @@ class Checklist(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assignee_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    backlog_project_key_or_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
-    tasks: Mapped[list["Task"]] = relationship(back_populates="checklist", order_by="Task.id")
+    tasks: Mapped[list["Task"]] = relationship(
+        back_populates="checklist", order_by="Task.id", cascade="all, delete-orphan"
+    )
     backlog_link: Mapped["ChecklistBacklogLink | None"] = relationship(
         back_populates="checklist", cascade="all, delete-orphan", single_parent=True
     )
