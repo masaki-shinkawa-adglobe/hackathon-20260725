@@ -26,13 +26,8 @@ Content-Type: application/json
       "id": 1,
       "name": "月次決算業務",
       "task_count": 2,
-      "backlog_registration": {
-        "is_registered": true,
-        "link_id": 10,
-        "backlog_issue_id": 12345,
-        "backlog_issue_key": "PROJ-100",
-        "backlog_issue_url": "https://example.backlog.com/view/PROJ-100"
-      },
+      "assignee_count": 3,
+      "backlog_last_registered_at": "2026-07-31T10:00:00+09:00",
       "updated_at": "2026-07-31T12:00:00+09:00"
     }
   ]
@@ -44,11 +39,8 @@ Content-Type: application/json
 | `checklists[].id` | integer | チェックリストID |
 | `checklists[].name` | string | チェックリスト名 |
 | `checklists[].task_count` | integer | 対象チェックリストに紐づくタスク数 |
-| `checklists[].backlog_registration.is_registered` | boolean | Backlog課題と紐づいているか |
-| `checklists[].backlog_registration.link_id` | integer \| null | チェックリストBacklog紐づきID。未登録時は `null` |
-| `checklists[].backlog_registration.backlog_issue_id` | integer \| null | Backlog課題ID。未登録時は `null` |
-| `checklists[].backlog_registration.backlog_issue_key` | string \| null | Backlog課題キー。未登録時は `null` |
-| `checklists[].backlog_registration.backlog_issue_url` | string \| null | Backlog課題URL。未登録時は `null` |
+| `checklists[].assignee_count` | integer | チェックリストの想定担当者数 |
+| `checklists[].backlog_last_registered_at` | string \| null | Backlog登録日時。登録済みなら `checklist_backlog_links.registered_at`、未登録なら `null` |
 | `checklists[].updated_at` | string | チェックリスト最終更新日時。`checklists.updated_at` をISO 8601形式で返す |
 
 ## 詳細取得
@@ -75,6 +67,7 @@ Content-Type: application/json
   "id": 1,
   "name": "月次決算業務",
   "description": "月次決算の標準チェックリスト",
+  "assignee_count": 3,
   "backlog_registration": {
     "is_registered": true,
     "link_id": 10,
@@ -99,6 +92,7 @@ Content-Type: application/json
 | `id` | integer | チェックリストID |
 | `name` | string | チェックリスト名 |
 | `description` | string \| null | チェックリスト概要 |
+| `assignee_count` | integer | チェックリストの想定担当者数 |
 | `backlog_registration.is_registered` | boolean | Backlog課題と紐づいているか |
 | `backlog_registration.link_id` | integer \| null | チェックリストBacklog紐づきID。未登録時は `null` |
 | `backlog_registration.backlog_issue_id` | integer \| null | Backlog課題ID。未登録時は `null` |
