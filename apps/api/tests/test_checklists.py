@@ -206,7 +206,7 @@ async def test_update_checklist_returns_updated_checklist_and_persists_values(
     response = client.patch(
         f"/checklists/{checklist.id}",
         json={
-            "name": "月次決算（改訂）",
+            "name": "  月次決算（改訂）  ",
             "description": "",
             "assignee_count": 3,
             "backlog_project_key_or_url": "https://example.backlog.com/projects/PROJ",
@@ -217,7 +217,7 @@ async def test_update_checklist_returns_updated_checklist_and_persists_values(
     assert response.json() == {
         "id": checklist.id,
         "name": "月次決算（改訂）",
-        "description": "",
+        "description": None,
         "assignee_count": 3,
         "backlog_project_key_or_url": "https://example.backlog.com/projects/PROJ",
     }
@@ -226,6 +226,27 @@ async def test_update_checklist_returns_updated_checklist_and_persists_values(
         assert updated is not None
         assert updated.assignee_count == 3
         assert updated.backlog_project_key_or_url == "https://example.backlog.com/projects/PROJ"
+        assert updated.name == "月次決算（改訂）"
+        assert updated.description is None
+
+
+@pytest.mark.asyncio
+async def test_update_checklist_preserves_omitted_optional_values(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    checklist = await add_checklist(session_factory)
+    async with session_factory() as session:
+        persisted = await session.get(Checklist, checklist.id)
+        assert persisted is not None
+        persisted.assignee_count = 3
+        persisted.backlog_project_key_or_url = "PROJ"
+        await session.commit()
+
+    response = client.patch(f"/checklists/{checklist.id}", json={"name": "更新後", "description": "説明"})
+
+    assert response.status_code == 200
+    assert response.json()["assignee_count"] == 3
+    assert response.json()["backlog_project_key_or_url"] == "PROJ"
 
 
 @pytest.mark.parametrize(
@@ -236,6 +257,7 @@ async def test_update_checklist_returns_updated_checklist_and_persists_values(
         {"name": "有効", "assignee_count": -1},
         {"name": "有効", "assignee_count": 1.0},
         {"name": "有効", "assignee_count": 1.5},
+        {"name": "有効", "assignee_count": None},
         {"name": "   ", "assignee_count": 1},
     ],
 )

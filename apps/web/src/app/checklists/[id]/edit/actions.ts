@@ -19,8 +19,9 @@ export async function updateChecklist(
 ): Promise<ChecklistFormState> {
   const name = String(formData.get("name") ?? "");
   const description = String(formData.get("description") ?? "");
+  const trimmedName = name.trim();
 
-  if (!name.trim()) {
+  if (!trimmedName) {
     return {
       errors: {
         name: "チェックリスト名を入力してください。",
@@ -30,6 +31,36 @@ export async function updateChecklist(
         description,
       },
     };
+  }
+
+  if (trimmedName.length > 255) {
+    return {
+      errors: {
+        name: "チェックリスト名は255文字以内で入力してください。",
+      },
+      values: {
+        name,
+        description,
+      },
+    };
+  }
+
+  const internalApiUrl = process.env.INTERNAL_API_URL;
+  if (!internalApiUrl) {
+    throw new Error("INTERNAL_API_URL is not configured");
+  }
+
+  const response = await fetch(new URL(`/checklists/${id}`, internalApiUrl), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: trimmedName,
+      description: description.trim() || null,
+    }),
+  });
+
+  if (!response.ok) {
+    return { errors: {}, values: { name, description } };
   }
 
   redirect(`/checklists/${id}`);
