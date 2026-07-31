@@ -145,6 +145,10 @@ def test_ai_bulk_tasks_openapi_declares_json_and_multipart_request_bodies() -> N
     assert set(content) == {"application/json", "multipart/form-data"}
     assert content["application/json"]["schema"]["required"] == ["checklist_id"]
     assert content["multipart/form-data"]["schema"]["required"] == ["checklist_id", "file"]
+    assert content["multipart/form-data"]["schema"]["properties"]["description"] == {
+        "type": ["string", "null"],
+        "maxLength": 10_000,
+    }
     assert content["multipart/form-data"]["schema"]["properties"]["file"] == {
         "type": "string",
         "format": "binary",
@@ -236,9 +240,11 @@ async def test_non_finite_ai_hours_return_error_without_persisting_tasks(
 class CapturingGenerator(StubGenerator):
     def __init__(self) -> None:
         super().__init__([GeneratedTask(title="生成タスク", summary="ファイルから生成", estimated_hours=1)])
+        self.description: str | None = None
         self.source: object | None = None
 
     async def generate_tasks(self, *, checklist_name: str, description: str | None = None, source: object | None = None) -> list[GeneratedTask]:
+        self.description = description
         self.source = source
         return await super().generate_tasks(checklist_name=checklist_name, description=description, source=source)
 
@@ -273,6 +279,25 @@ async def test_creates_tasks_from_supported_uploaded_files(
     assert generator.source is not None
     async with session_factory() as session:
         assert await session.scalar(select(func.count()).select_from(Task)) == 1
+
+
+@pytest.mark.asyncio
+async def test_upload_accepts_description_as_instruction(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    checklist = await create_checklist(session_factory)
+    generator = CapturingGenerator()
+    app.dependency_overrides[get_task_generator] = lambda: generator
+
+    response = client.post(
+        "/checklists/ai-bulk-tasks",
+        data={"checklist_id": str(checklist.id), "description": "PDFを参考に担当者別へ分解して"},
+        files={"file": ("source.pdf", b"%PDF-1.7 example", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert generator.description == "PDFを参考に担当者別へ分解して"
+    assert generator.source is not None
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ class AIBulkTasksRequest(BaseModel):
 
 class AIBulkTasksUploadRequest(BaseModel):
     checklist_id: int
+    description: str | None = Field(default=None, max_length=10_000)
 
 
 class GeneratedTask(BaseModel):

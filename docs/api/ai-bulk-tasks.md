@@ -40,9 +40,10 @@ Content-Type: application/json または multipart/form-data
 | フィールド | 型 | 必須 | 制約 | 説明 |
 | --- | --- | --- | --- | --- |
 | `checklist_id` | integer | 必須 | 既存チェックリストID | タスクを登録する対象チェックリスト |
+| `description` | string \| null | 任意 | 最大10,000文字 | 資料ファイルと併用する補足指示 |
 | `file` | file | 必須 | 単一ファイル、10 MiB以下 | タスク分解に使う資料 |
 
-対応形式はPDF、XLSX、CSV、TXTである。PDFはGeminiへ文書として渡し、XLSXは全ワークシートをCSV相当のテキストへ抽出して渡す。CSV/TXTはUTF-8（BOM可）に限る。
+`description` は省略できる。対応形式はPDF、XLSX、CSV、TXTである。PDFはGeminiへ文書として渡し、XLSXは全ワークシートをCSV相当のテキストへ抽出して渡す。CSV/TXTはUTF-8（BOM可）に限る。
 
 ## 成功レスポンス
 
@@ -186,6 +187,7 @@ curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
 ```bash
 curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
   -F 'checklist_id=1' \
+  -F 'description=月次決算の作業を、以下PDFを参考にタスク分解してください。' \
   -F 'file=@./monthly-close.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ```
 
@@ -196,7 +198,7 @@ curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
 - 実行ボタンは二重送信を避けるため、リクエスト中はdisabledにする。
 - 成功時は返却された `tasks` を画面へ反映する。
 - `502` と `503` はAI連携起因として利用者へ再試行可能なエラーとして表示する。
-- JSON入力とファイル入力は同じエンドポイントであり、ファイル入力時は `description` を送らない。
+- JSON入力とファイル入力は同じエンドポイントであり、ファイル入力時も `description` を補足指示として送れる。
 
 ## 環境変数
 

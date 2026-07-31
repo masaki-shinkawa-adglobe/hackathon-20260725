@@ -64,6 +64,7 @@ async def health(
                         "required": ["checklist_id", "file"],
                         "properties": {
                             "checklist_id": {"type": "integer"},
+                            "description": {"type": ["string", "null"], "maxLength": 10_000},
                             "file": {"type": "string", "format": "binary"},
                         },
                     }
@@ -88,7 +89,7 @@ async def create_ai_bulk_tasks(
                 raise HTTPException(status_code=422, detail="A single file is required")
             upload = upload_values[0]
             upload_request = AIBulkTasksUploadRequest.model_validate(
-                {"checklist_id": form.get("checklist_id")}
+                {"checklist_id": form.get("checklist_id"), "description": form.get("description")}
             )
             processed = process_upload(
                 filename=upload.filename,
@@ -101,6 +102,7 @@ async def create_ai_bulk_tasks(
                 document_mime_type=processed.mime_type,
             )
             checklist_id = upload_request.checklist_id
+            description = upload_request.description
         elif content_type.startswith("application/json"):
             json_request = AIBulkTasksRequest.model_validate(await request.json())
             checklist_id = json_request.checklist_id
