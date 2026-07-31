@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime, timedelta
+from math import ceil
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
@@ -16,15 +17,20 @@ from app.gemini import (
     GeminiConfigurationError,
     GeminiRequestError,
     GeminiResponseError,
+    ScheduleGenerator,
     TaskGenerator,
     TaskSource,
+    get_schedule_generator,
     get_task_generator,
 )
-from app.models import Checklist, Task, TaskBacklogLink
+from app.models import BacklogPlan, BacklogPlanItem, Checklist, Task, TaskBacklogLink
 from app.file_processing import FileValidationError, process_upload, read_upload_with_limit
 from app.schemas import (
     AIBulkTasksResponse,
     AIBulkTasksUploadRequest,
+    BacklogPlanCreateRequest,
+    BacklogPlanCreateResponse,
+    BacklogPlanItemResponse,
     BacklogRegistrationResponse,
     ChecklistDetailResponse,
     ChecklistCreateRequest,
@@ -33,6 +39,7 @@ from app.schemas import (
     ChecklistUpdateRequest,
     ChecklistUpdateResponse,
     ChecklistsResponse,
+    GeneratedScheduleItem,
     ManualTaskCreateRequest,
     TaskDetailResponse,
     TaskResponse,
@@ -64,6 +71,85 @@ def backlog_registration(
         total_task_count=total_task_count,
         last_issued_at=last_issued_at,
     )
+
+
+def is_business_day(value: date) -> bool:
+    return value.weekday() < 5
+
+
+def business_day_count(start_date: date, end_date: date) -> int:
+    return sum(
+        is_business_day(start_date + timedelta(days=offset))
+        for offset in range((end_date - start_date).days + 1)
+    )
+
+
+def next_business_day(value: date) -> date:
+    result = value + timedelta(days=1)
+    while not is_business_day(result):
+        result += timedelta(days=1)
+    return result
+
+
+def schedule_error(message: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail={"code": "invalid_ai_schedule", "message": message})
+
+
+def validate_schedule(
+    generated_items: list[GeneratedScheduleItem],
+    tasks: list[Task],
+    request: BacklogPlanCreateRequest,
+) -> None:
+    task_by_id = {task.id: task for task in tasks}
+    if len(generated_items) != len(tasks):
+        raise schedule_error("Gemini returned an incomplete schedule")
+    items_by_task_id = {}
+    for item in generated_items:
+        task_id = item.task_id
+        if task_id not in task_by_id or task_id in items_by_task_id:
+            raise schedule_error("Gemini returned unexpected tasks")
+        items_by_task_id[task_id] = item
+        if not 1 <= item.assignee_slot <= request.expected_assignee_count:
+            raise schedule_error("Gemini returned an invalid assignee slot")
+        if not (request.start_date <= item.start_date <= item.due_date <= request.end_date):
+            raise schedule_error("Gemini returned dates outside the requested range")
+        if not is_business_day(item.start_date) or not is_business_day(item.due_date):
+            raise schedule_error("Gemini scheduled a task on a non-business day")
+        required_days = ceil(task_by_id[task_id].estimated_hours / 8)
+        if business_day_count(item.start_date, item.due_date) != required_days:
+            raise schedule_error("Gemini returned an invalid task duration")
+        dependencies = item.depends_on_task_ids
+        if len(dependencies) != len(set(dependencies)) or task_id in dependencies or not set(dependencies) <= set(task_by_id):
+            raise schedule_error("Gemini returned invalid dependencies")
+
+    for first in generated_items:
+        for second in generated_items:
+            if first is second or first.assignee_slot != second.assignee_slot:
+                continue
+            if first.start_date <= second.due_date and second.start_date <= first.due_date:
+                raise schedule_error("Gemini returned overlapping assignee schedules")
+
+    for task_id, item in items_by_task_id.items():
+        for dependency_id in item.depends_on_task_ids:
+            if item.start_date < next_business_day(items_by_task_id[dependency_id].due_date):
+                raise schedule_error("Gemini returned an invalid dependency order")
+
+    visiting: set[int] = set()
+    visited: set[int] = set()
+
+    def visit(task_id: int) -> None:
+        if task_id in visiting:
+            raise schedule_error("Gemini returned cyclic dependencies")
+        if task_id in visited:
+            return
+        visiting.add(task_id)
+        for dependency_id in items_by_task_id[task_id].depends_on_task_ids:
+            visit(dependency_id)
+        visiting.remove(task_id)
+        visited.add(task_id)
+
+    for task_id in items_by_task_id:
+        visit(task_id)
 
 
 @app.get("/health")
@@ -257,6 +343,111 @@ async def update_task(
     await session.commit()
     await session.refresh(task)
     return task
+
+
+@app.post(
+    "/checklists/{checklist_id}/backlog-plans",
+    response_model=BacklogPlanCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_backlog_plan(
+    checklist_id: int,
+    request: BacklogPlanCreateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    schedule_generator: Annotated[ScheduleGenerator, Depends(get_schedule_generator)],
+) -> BacklogPlanCreateResponse:
+    checklist = await session.get(Checklist, checklist_id)
+    if checklist is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "checklist_not_found", "message": "Checklist not found"})
+
+    tasks = list(
+        (
+            await session.scalars(
+                select(Task)
+                .options(selectinload(Task.backlog_link))
+                .where(Task.checklist_id == checklist_id, Task.id.in_(request.task_ids))
+            )
+        ).all()
+    )
+    if len(tasks) != len(request.task_ids):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail={"code": "invalid_input", "message": "Tasks must belong to the checklist"})
+    if any(task.backlog_link is not None for task in tasks):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "task_already_issued", "message": "Selected tasks already include an issued task"})
+
+    available_business_days = business_day_count(request.start_date, request.end_date)
+    total_capacity_hours = available_business_days * request.expected_assignee_count * 8
+    if (
+        available_business_days == 0
+        or sum(task.estimated_hours for task in tasks) > total_capacity_hours
+        or any(ceil(task.estimated_hours / 8) > available_business_days for task in tasks)
+    ):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail={"code": "schedule_impossible", "message": "The requested period and assignee count cannot accommodate the tasks"})
+
+    try:
+        generated_items = await schedule_generator.generate_schedule(
+            checklist_name=checklist.name,
+            tasks=[
+                {"task_id": task.id, "title": task.title, "summary": task.summary, "estimated_hours": task.estimated_hours}
+                for task in tasks
+            ],
+            start_date=request.start_date.isoformat(),
+            end_date=request.end_date.isoformat(),
+            expected_assignee_count=request.expected_assignee_count,
+        )
+        validate_schedule(generated_items, tasks, request)
+    except GeminiConfigurationError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={"code": "integration_not_configured", "message": "Gemini integration is not configured"}) from error
+    except GeminiRequestError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail={"code": "gemini_request_failed", "message": "Gemini request failed"}) from error
+    except GeminiResponseError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail={"code": "invalid_ai_schedule", "message": "Gemini returned an invalid schedule"}) from error
+
+    plan = BacklogPlan(
+        checklist_id=checklist.id,
+        backlog_project_key_or_url=checklist.backlog_project_key_or_url,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        expected_assignee_count=request.expected_assignee_count,
+    )
+    session.add(plan)
+    await session.flush()
+    task_by_id = {task.id: task for task in tasks}
+    items = [
+        BacklogPlanItem(
+            backlog_plan_id=plan.id,
+            task_id=generated.task_id,
+            title=task_by_id[generated.task_id].title,
+            summary=task_by_id[generated.task_id].summary,
+            estimated_hours=task_by_id[generated.task_id].estimated_hours,
+            assignee_slot=generated.assignee_slot,
+            start_date=generated.start_date,
+            due_date=generated.due_date,
+            depends_on_task_ids=generated.depends_on_task_ids,
+        )
+        for generated in generated_items
+    ]
+    session.add_all(items)
+    await session.commit()
+    return BacklogPlanCreateResponse(
+        plan_id=plan.id,
+        checklist_id=checklist.id,
+        status="planned",
+        start_date=plan.start_date,
+        end_date=plan.end_date,
+        expected_assignee_count=plan.expected_assignee_count,
+        items=[
+            BacklogPlanItemResponse(
+                task_id=item.task_id,
+                title=item.title,
+                estimated_hours=item.estimated_hours,
+                assignee_slot=item.assignee_slot,
+                start_date=item.start_date,
+                due_date=item.due_date,
+                depends_on_task_ids=item.depends_on_task_ids,
+            )
+            for item in items
+        ],
+    )
 
 
 @app.post(

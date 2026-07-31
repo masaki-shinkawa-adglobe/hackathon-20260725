@@ -6,7 +6,7 @@ from typing import Protocol
 
 from pydantic import TypeAdapter, ValidationError
 
-from app.schemas import GeneratedTask
+from app.schemas import GeneratedScheduleItem, GeneratedTask
 
 
 class GeminiConfigurationError(Exception):
@@ -32,6 +32,18 @@ class TaskGenerator(Protocol):
     async def generate_tasks(
         self, *, checklist_name: str, description: str | None = None, source: TaskSource | None = None
     ) -> list[GeneratedTask]: ...
+
+
+class ScheduleGenerator(Protocol):
+    async def generate_schedule(
+        self,
+        *,
+        checklist_name: str,
+        tasks: list[dict[str, object]],
+        start_date: str,
+        end_date: str,
+        expected_assignee_count: int,
+    ) -> list[GeneratedScheduleItem]: ...
 
 
 class GeminiTaskGenerator:
@@ -103,3 +115,57 @@ class EnvironmentGeminiTaskGenerator:
 
 def get_task_generator() -> TaskGenerator:
     return EnvironmentGeminiTaskGenerator()
+
+
+class GeminiScheduleGenerator:
+    def __init__(self, api_key: str) -> None:
+        self._api_key = api_key
+
+    async def generate_schedule(
+        self,
+        *,
+        checklist_name: str,
+        tasks: list[dict[str, object]],
+        start_date: str,
+        end_date: str,
+        expected_assignee_count: int,
+    ) -> list[GeneratedScheduleItem]:
+        prompt = (
+            "次の既存タスクの日程計画を作成してください。JSON配列だけを返してください。"
+            "各要素は task_id, assignee_slot, start_date, due_date, depends_on_task_ids を必須とします。"
+            "タスクを追加、削除、分割、統合せず、与えられたtask_idを各1回だけ返してください。"
+            "担当枠は1から指定数までです。1人1日8時間、土日非稼働、祝日無視です。"
+            "各タスクは1枠を連続占有し、所要営業日数はceil(estimated_hours / 8)です。"
+            "依存先の期限日の次の営業日以降に後続タスクを開始してください。\n"
+            f"チェックリスト名: {checklist_name}\n"
+            f"開始日: {start_date}\n期限日: {end_date}\n担当枠数: {expected_assignee_count}\n"
+            f"タスク: {json.dumps(tasks, ensure_ascii=False)}"
+        )
+        try:
+            response_text = await asyncio.to_thread(self._request, prompt)
+        except (GeminiConfigurationError, GeminiResponseError):
+            raise
+        except Exception as error:
+            raise GeminiRequestError("Gemini API request failed") from error
+        try:
+            schedule = TypeAdapter(list[GeneratedScheduleItem]).validate_python(json.loads(response_text))
+        except (json.JSONDecodeError, ValidationError, TypeError) as error:
+            raise GeminiResponseError("Gemini returned an invalid schedule") from error
+        if not schedule:
+            raise GeminiResponseError("Gemini returned an empty schedule")
+        return schedule
+
+    def _request(self, prompt: str) -> str:
+        return GeminiTaskGenerator(self._api_key)._request(prompt)
+
+
+class EnvironmentGeminiScheduleGenerator:
+    async def generate_schedule(self, **kwargs: object) -> list[GeneratedScheduleItem]:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise GeminiConfigurationError("GEMINI_API_KEY is not configured")
+        return await GeminiScheduleGenerator(api_key).generate_schedule(**kwargs)  # type: ignore[arg-type]
+
+
+def get_schedule_generator() -> ScheduleGenerator:
+    return EnvironmentGeminiScheduleGenerator()
