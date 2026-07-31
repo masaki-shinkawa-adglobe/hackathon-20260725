@@ -48,18 +48,35 @@ Orchestratorが起動する各役は、経路を問わず次の設定を明示�
 - サブエージェントへフォールバックした場合は、各役の `spawn_agent` で `fork_turns: "none"`、上表の `model`、`reasoning_effort` を明示する。`fork_turns` の省略または `all` は使用しない。同じInterfaceを使い、修正と再レビューは同じImplementer、Reviewerへfollow-upして、起動時のagentと設定を維持する。
 - Herdrの利用有無とフォールバック理由を利用者へ報告する。
 
+## Issueラベル
+
+対象Issueの進捗に合わせ、次の`status:*`ラベルを更新する。
+
+| 状態 | ラベル |
+| --- | --- |
+| Planner、Implementer、レビュー指摘の修正中 | `status:in-progress` |
+| Reviewer実行中、Reviewer承認後、draft PR作成後 | `status:review` |
+| いずれかの役が`BLOCKED`、またはOrchestratorが停滞を検知 | `status:blocked` |
+
+- 状態へ入る直前にラベルを更新する。開始時はPlannerを呼び出す前に`status:in-progress`へ更新する。
+- `status:in-progress`、`status:review`、`status:blocked`は排他的に扱い、更新時は他の2つを削除する。
+- 種別、優先度など、`status:*`以外の既存ラベルは変更しない。
+- Reviewerの`CHANGES_REQUESTED`をImplementerへ差し戻す前に`status:in-progress`へ戻し、再レビュー前に`status:review`へ更新する。
+- Reviewer承認後とdraft PR作成後は`status:review`を維持する。
+- ラベル自体の作成、説明、色の変更は行わない。必要なラベルが存在しない、権限不足、または更新に失敗した場合は、実装フローを続行せず、エラーを利用者へ報告する。可能なら既存ラベルを`status:blocked`へ更新して終了する。
+
 ## 手順
 
-1. 対象Issueとリポジトリの基本情報を確認する。作業開始前に`git status --porcelain=v1 -uall`を記録する。
-2. Herdrが利用可能ならHerdrを優先し、`$issue-planner`を呼び出して実装計画を作成させる。`PLANNED`なら続行し、`BLOCKED`なら終了する。
+1. 対象Issueとリポジトリの基本情報を確認する。作業開始前に`git status --porcelain=v1 -uall`を記録する。必要な3つの進捗ラベルが存在することを確認し、対象Issueを`status:in-progress`へ更新する。
+2. Herdrが利用可能ならHerdrを優先し、`$issue-planner`を呼び出して実装計画を作成させる。`PLANNED`なら続行し、`BLOCKED`なら`status:blocked`へ更新して終了する。
 3. Issue、計画、開始前から変更されているパスを`$issue-implementer`へ渡し、実装とテストを任せる。開始前の変更とmanifestが同じパスなら、変更を混在させず`BLOCKED`として終了する。
 4. 開始前の変更、現在の変更、Implementerの累積manifestを比較する。開始後に増えたmanifest外の変更があれば、同じImplementerへ説明またはmanifest更新を依頼する。
-5. Issue、計画、manifest内の変更（未追跡ファイルを含む）、テスト結果を、新しい`$issue-reviewer`へ渡す。
-6. Reviewerが`CHANGES_REQUESTED`なら、同じImplementerへ指摘を渡す。`IMPLEMENTED`を回収後、更新された完全なmanifestとテスト結果を同じReviewerへ渡して再レビューさせる。固定回数を設けず、停滞時は終了して利用者へ報告する。
-7. Reviewerが`BLOCKED`ならcommit、push、PR作成を行わず、理由と残作業を利用者へ報告する。
+5. `status:review`へ更新し、Issue、計画、manifest内の変更（未追跡ファイルを含む）、テスト結果を、新しい`$issue-reviewer`へ渡す。
+6. Reviewerが`CHANGES_REQUESTED`なら、`status:in-progress`へ戻して同じImplementerへ指摘を渡す。`IMPLEMENTED`を回収後、`status:review`へ更新し、更新された完全なmanifestとテスト結果を同じReviewerへ渡して再レビューさせる。固定回数を設けず、停滞時は`status:blocked`へ更新して終了し、利用者へ報告する。
+7. Planner、Implementer、Reviewerのいずれかが`BLOCKED`なら`status:blocked`へ更新する。Reviewerが`BLOCKED`ならcommit、push、PR作成を行わず、理由と残作業を利用者へ報告する。
 8. Reviewerが明示的に`APPROVED`を返した場合だけpublishへ進む。現在のbranchと既存PRの状態を確認し、default branch上または既存PRがmerge済みのbranch上なら、新しい`agent/{issue番号}-{短い説明}`branchを作成する。
 9. Implementerのmanifest内かつReviewerが確認した変更だけを明示的にstageしてcommitする。開始前から存在した変更、manifest外の変更、未レビュー変更を含めない。
-10. commitをoriginへpushし、Reviewerが作成したPR本文を使ってdefault branch向けのdraft PRを作成する。`gh pr create`では`--assignee @me`を指定し、認証中のGitHubユーザーをassigneeへ設定する。PR本文に対象Issue、変更内容、テスト結果がなければ、同じReviewerへ補完を依頼する。
+10. `status:review`を維持したままcommitをoriginへpushし、Reviewerが作成したPR本文を使ってdefault branch向けのdraft PRを作成する。`gh pr create`では`--assignee @me`を指定し、認証中のGitHubユーザーをassigneeへ設定する。PR本文に対象Issue、変更内容、テスト結果がなければ、同じReviewerへ補完を依頼する。
 11. 各役、commit、push、PRの結果を利用者へ簡潔に報告する。
 
 対象Issueが特定できない場合だけ、Issue番号またはURLを利用者へ確認する。
