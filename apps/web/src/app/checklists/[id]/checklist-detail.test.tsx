@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({
 import { ChecklistDetail } from "./checklist-detail"
 
 const toastMock = vi.hoisted(() => ({
+  error: vi.fn(),
   success: vi.fn(),
   warning: vi.fn(),
 }))
@@ -22,6 +23,7 @@ function checklistResponse({ id = 1, name = "チェックリスト", tasks = [] 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  toastMock.error.mockReset()
   toastMock.success.mockReset()
   toastMock.warning.mockReset()
 })
@@ -63,6 +65,85 @@ test("タスクが0件の場合は空状態を表示する", async () => {
   expect(await screen.findByText("タスクはまだ登録されていません")).toBeInTheDocument()
   expect(screen.getByText("説明はありません。")).toBeInTheDocument()
   expect(screen.queryByRole("table")).not.toBeInTheDocument()
+})
+
+test("手動登録に成功すると詳細を再取得して新しいタスクを表示する", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 1, name: "月次決算", description: null, tasks: [] }), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 2, checklist_id: 1, title: "手動タスク", summary: null, estimated_hours: 0.5 }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 1, name: "月次決算", description: null, tasks: [{ id: 2, checklist_id: 1, title: "手動タスク", summary: null, estimated_hours: 0.5 }] }), { status: 200 }))
+  vi.stubGlobal("fetch", fetchMock)
+  const user = userEvent.setup()
+
+  render(<ChecklistDetail checklistId="1" />)
+
+  await screen.findByRole("button", { name: "タスク手動登録" })
+  await user.click(screen.getByRole("button", { name: "タスク手動登録" }))
+  await user.type(screen.getByLabelText("タイトル"), "手動タスク")
+  await user.type(screen.getByLabelText("工数（時間）"), "0.5")
+  await user.click(screen.getByRole("button", { name: "登録する" }))
+
+  expect(await screen.findByRole("link", { name: "手動タスク" })).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/checklists/1/tasks", expect.objectContaining({ method: "POST" }))
+  expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/checklists/1")
+  await waitFor(() => expect(screen.getByRole("button", { name: "タスク手動登録" })).toHaveFocus())
+})
+
+test("作成後の再取得失敗はPOSTを再試行せず、一覧の再取得だけで復旧できる", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 1, name: "月次決算", description: null, tasks: [] }), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 2, checklist_id: 1, title: "手動タスク", summary: null, estimated_hours: 0.5 }), { status: 201 }))
+    .mockRejectedValueOnce(new Error("network error"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 1, name: "月次決算", description: null, tasks: [{ id: 2, checklist_id: 1, title: "手動タスク", summary: null, estimated_hours: 0.5 }] }), { status: 200 }))
+  vi.stubGlobal("fetch", fetchMock)
+  const user = userEvent.setup()
+
+  render(<ChecklistDetail checklistId="1" />)
+
+  await user.click(await screen.findByRole("button", { name: "タスク手動登録" }))
+  await user.type(screen.getByLabelText("タイトル"), "手動タスク")
+  await user.type(screen.getByLabelText("工数（時間）"), "0.5")
+  await user.click(screen.getByRole("button", { name: "登録する" }))
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("タスクは登録されましたが、一覧を更新できませんでした。")
+  expect(fetchMock).toHaveBeenCalledTimes(3)
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  await user.click(screen.getByRole("button", { name: "一覧を再取得" }))
+
+  expect(await screen.findByRole("link", { name: "手動タスク" })).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledTimes(4)
+  expect(fetchMock.mock.calls.filter(([url]) => url === "/api/checklists/1/tasks")).toHaveLength(1)
+})
+
+test("手動登録後の再取得エラーはAI登録後の詳細再取得成功で解除する", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(checklistResponse({ id: 1, tasks: [] }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 2, checklist_id: 1, title: "手動タスク", summary: null, estimated_hours: 0.5 }), { status: 201 }))
+    .mockRejectedValueOnce(new Error("network error"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ tasks: [
+      { id: 3, checklist_id: 1, title: "AIタスク", summary: "AIで作成", estimated_hours: 1 },
+    ] }), { status: 200 }))
+    .mockResolvedValueOnce(checklistResponse({ id: 1, tasks: [
+      { id: 2, checklist_id: 1, title: "手動タスク", summary: null, estimated_hours: 0.5 },
+      { id: 3, checklist_id: 1, title: "AIタスク", summary: "AIで作成", estimated_hours: 1 },
+    ] }))
+  vi.stubGlobal("fetch", fetchMock)
+  const user = userEvent.setup()
+
+  render(<ChecklistDetail checklistId="1" />)
+
+  await user.click(await screen.findByRole("button", { name: "タスク手動登録" }))
+  await user.type(screen.getByLabelText("タイトル"), "手動タスク")
+  await user.type(screen.getByLabelText("工数（時間）"), "0.5")
+  await user.click(screen.getByRole("button", { name: "登録する" }))
+  expect(await screen.findByRole("alert")).toHaveTextContent("タスクは登録されましたが、一覧を更新できませんでした。")
+
+  await user.click(screen.getByRole("button", { name: "AIでタスクを一括登録" }))
+  await user.type(screen.getByLabelText("説明（任意）"), "AIタスクを作成する")
+  await user.click(screen.getByRole("button", { name: "AIで登録" }))
+
+  expect(await screen.findByRole("link", { name: "AIタスク" })).toBeInTheDocument()
+  expect(screen.queryByText("タスクは登録されましたが、一覧を更新できませんでした。")).not.toBeInTheDocument()
 })
 
 test("取得失敗後に再試行して表示を復旧する", async () => {
