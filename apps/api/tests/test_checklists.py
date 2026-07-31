@@ -352,7 +352,7 @@ async def test_get_checklist_returns_detail_tasks_and_registration(
             "is_registered": True, "link_id": link.id, "backlog_issue_id": 12345,
             "backlog_issue_key": "PROJ-100", "backlog_issue_url": "https://example.backlog.com/view/PROJ-100",
         },
-        "tasks": [{"id": 1, "checklist_id": checklist.id, "title": "仕訳確認", "summary": "仕訳を確認する", "estimated_hours": 2.0}],
+        "tasks": [{"id": 1, "checklist_id": checklist.id, "title": "仕訳確認", "summary": "仕訳を確認する", "estimated_hours": 2.0, "priority": "medium"}],
     }
 
 
