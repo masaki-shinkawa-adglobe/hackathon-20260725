@@ -6,8 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "開発環境ステータス",
-  description: "FastAPI と PostgreSQL の疎通状態を確認します。",
+  title: "チェックリスト一覧",
+  description: "保存したチェックリストの進捗を確認できます。",
 };
 
 export default function RootLayout({

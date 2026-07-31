@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 
 import { AppBreadcrumb } from "@/components/app-breadcrumb"
+import { AIBulkTasksDialog, type AIBulkTask } from "@/components/ai-bulk-tasks-dialog"
 import { AppDialog, type AppDialogSize } from "@/components/app-dialog"
 import { AppSidebar } from "@/components/app-sidebar"
 import {
@@ -97,6 +98,9 @@ export default function UiPreviewPage() {
   const [sort, setSort] = useState<DataTableSortState | null>(null)
   const [tableState, setTableState] = useState<TableState>("default")
   const [toastActionResult, setToastActionResult] = useState("アクション結果はありません。")
+  const [checklistId, setChecklistId] = useState("1")
+  const [isAIBulkTasksDialogOpen, setIsAIBulkTasksDialogOpen] = useState(false)
+  const [createdTasks, setCreatedTasks] = useState<AIBulkTask[]>([])
 
   const data = useMemo(() => {
     if (tableState === "empty") {
@@ -215,6 +219,34 @@ export default function UiPreviewPage() {
             <p aria-live="polite" className="text-sm text-muted-foreground">
               {toastActionResult}
             </p>
+          </section>
+
+          <section className="space-y-4 rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
+            <div>
+              <h2 className="text-lg font-semibold">AIでタスクを一括登録</h2>
+              <p className="text-sm text-muted-foreground">実APIへ送信するモーダルの動作を確認します。</p>
+            </div>
+            <div className="flex items-end gap-3">
+              <label className="grid gap-1 text-sm font-medium" htmlFor="preview-checklist-id">
+                チェックリストID
+                <Input id="preview-checklist-id" type="number" min="1" value={checklistId} onChange={(event) => setChecklistId(event.target.value)} />
+              </label>
+              <Button onClick={() => setIsAIBulkTasksDialogOpen(true)} disabled={!Number.isInteger(Number(checklistId)) || Number(checklistId) < 1}>AIでタスクを一括登録</Button>
+            </div>
+            {createdTasks.length > 0 && (
+              <div aria-live="polite">
+                <h3 className="font-medium">作成されたタスク</h3>
+                <ul className="mt-2 list-disc pl-5">
+                  {createdTasks.map((task) => <li key={task.id}>{task.title}</li>)}
+                </ul>
+              </div>
+            )}
+            <AIBulkTasksDialog
+              checklistId={Number(checklistId)}
+              open={isAIBulkTasksDialogOpen}
+              onOpenChange={setIsAIBulkTasksDialogOpen}
+              onSuccess={setCreatedTasks}
+            />
           </section>
 
           <section className="space-y-4 rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
