@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SidebarProvider } from "@/components/ui/sidebar"
+import { toast } from "sonner"
 
 type PreviewRow = {
   id: string
@@ -65,10 +66,38 @@ function PreviewDialog({ size, description }: PreviewDialogProps) {
   )
 }
 
+const toastVariants = [
+  {
+    type: "default",
+    show: () => toast("既定の通知", { description: "通常の処理結果をお知らせします。" }),
+  },
+  {
+    type: "success",
+    show: () => toast.success("成功通知", { description: "処理が正常に完了しました。" }),
+  },
+  {
+    type: "info",
+    show: () => toast.info("情報通知", { description: "確認が必要な情報があります。" }),
+  },
+  {
+    type: "warning",
+    show: () => toast.warning("警告通知", { description: "内容を確認してから続行してください。" }),
+  },
+  {
+    type: "error",
+    show: () => toast.error("エラー通知", { description: "処理を完了できませんでした。" }),
+  },
+  {
+    type: "loading",
+    show: () => toast.loading("処理中通知", { description: "処理が完了するまでお待ちください。" }),
+  },
+] as const
+
 export default function UiPreviewPage() {
   const [searchValue, setSearchValue] = useState("")
   const [sort, setSort] = useState<DataTableSortState | null>(null)
   const [tableState, setTableState] = useState<TableState>("default")
+  const [toastActionResult, setToastActionResult] = useState("アクション結果はありません。")
   const [checklistId, setChecklistId] = useState("1")
   const [isAIBulkTasksDialogOpen, setIsAIBulkTasksDialogOpen] = useState(false)
   const [createdTasks, setCreatedTasks] = useState<AIBulkTask[]>([])
@@ -127,6 +156,69 @@ export default function UiPreviewPage() {
               <Button variant="destructive">destructive</Button>
               <Button variant="ghost">ghost</Button>
             </div>
+          </section>
+
+          <section className="space-y-4 rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
+            <div>
+              <h2 className="text-lg font-semibold">Sonner</h2>
+              <p className="text-sm text-muted-foreground">通知の種類、アクション、非同期処理の状態更新を確認します。</p>
+            </div>
+            <div className="flex flex-wrap gap-3" aria-label="Toastの種類">
+              {toastVariants.map(({ type, show }) => (
+                <Button key={type} variant="outline" onClick={show}>
+                  {type} Toast
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  toast("変更を保存しました", {
+                    description: "必要に応じて直前の状態へ戻せます。",
+                    action: {
+                      label: "元に戻す",
+                      onClick: () => setToastActionResult("変更を元に戻しました。"),
+                    },
+                  })
+                }
+              >
+                アクション付きToast
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  toast.promise(
+                    new Promise<void>((resolve) => window.setTimeout(resolve, 500)),
+                    {
+                      loading: "処理を実行しています",
+                      success: "処理が完了しました",
+                      error: "処理に失敗しました",
+                    }
+                  )
+                }
+              >
+                Promise成功Toast
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  toast.promise(
+                    new Promise<void>((_, reject) => window.setTimeout(() => reject(new Error("失敗")), 500)),
+                    {
+                      loading: "処理を実行しています",
+                      success: "処理が完了しました",
+                      error: "処理に失敗しました",
+                    }
+                  )
+                }
+              >
+                Promise失敗Toast
+              </Button>
+            </div>
+            <p aria-live="polite" className="text-sm text-muted-foreground">
+              {toastActionResult}
+            </p>
           </section>
 
           <section className="space-y-4 rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
