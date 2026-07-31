@@ -2,7 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy import func, select, text
@@ -26,8 +26,14 @@ from app.schemas import (
     AIBulkTasksUploadRequest,
     BacklogRegistrationResponse,
     ChecklistDetailResponse,
+    ChecklistCreateRequest,
+    ChecklistCreateResponse,
     ChecklistListItemResponse,
+    ChecklistUpdateRequest,
+    ChecklistUpdateResponse,
     ChecklistsResponse,
+    ManualTaskCreateRequest,
+    TaskResponse,
 )
 
 
@@ -66,6 +72,20 @@ async def health(
     return {"status": "ok"}
 
 
+@app.post(
+    "/checklists", status_code=status.HTTP_201_CREATED, response_model=ChecklistCreateResponse
+)
+async def create_checklist(
+    request: ChecklistCreateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Checklist:
+    checklist = Checklist(**request.model_dump())
+    session.add(checklist)
+    await session.commit()
+    await session.refresh(checklist)
+    return checklist
+
+
 @app.get("/checklists", response_model=ChecklistsResponse)
 async def list_checklists(
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -87,12 +107,44 @@ async def list_checklists(
                 id=checklist.id,
                 name=checklist.name,
                 task_count=task_count or 0,
-                backlog_registration=backlog_registration(link),
+                assignee_count=checklist.assignee_count,
+                backlog_last_registered_at=link.registered_at if link else None,
                 updated_at=checklist.updated_at,
             )
             for checklist, task_count, link in result.all()
         ]
     )
+
+
+@app.patch("/checklists/{checklist_id}", response_model=ChecklistUpdateResponse)
+async def update_checklist(
+    checklist_id: int,
+    request: ChecklistUpdateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Checklist:
+    checklist = await session.get(Checklist, checklist_id)
+    if checklist is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist not found")
+
+    for field, value in request.model_dump().items():
+        setattr(checklist, field, value)
+    await session.commit()
+    await session.refresh(checklist)
+    return checklist
+
+
+@app.delete("/checklists/{checklist_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_checklist(
+    checklist_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    checklist = await session.get(Checklist, checklist_id)
+    if checklist is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist not found")
+
+    await session.delete(checklist)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.get("/checklists/{checklist_id}", response_model=ChecklistDetailResponse)
@@ -111,9 +163,36 @@ async def get_checklist(
         id=checklist.id,
         name=checklist.name,
         description=checklist.description,
+        assignee_count=checklist.assignee_count,
         backlog_registration=backlog_registration(checklist.backlog_link),
         tasks=checklist.tasks,
     )
+
+
+@app.post(
+    "/checklists/{checklist_id}/tasks",
+    response_model=TaskResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_manual_task(
+    checklist_id: int,
+    task_request: ManualTaskCreateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> TaskResponse:
+    checklist = await session.scalar(select(Checklist).where(Checklist.id == checklist_id))
+    if checklist is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist not found")
+
+    task = Task(
+        checklist_id=checklist.id,
+        title=task_request.title,
+        summary=task_request.summary,
+        estimated_hours=task_request.estimated_hours,
+    )
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
 
 
 @app.post(

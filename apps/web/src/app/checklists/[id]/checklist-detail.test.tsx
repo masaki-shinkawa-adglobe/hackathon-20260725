@@ -26,12 +26,15 @@ test("実API形式のチェックリストとタスクを表示する", async ()
   expect(await screen.findByRole("heading", { name: "月次決算" })).toBeInTheDocument()
   expect(screen.getByText("月ごとの締め作業です。")).toBeInTheDocument()
   expect(screen.getByRole("columnheader", { name: "タイトル" })).toBeInTheDocument()
-  expect(screen.getByRole("cell", { name: "仕訳を確認" })).toBeInTheDocument()
+  expect(screen.getByRole("link", { name: "仕訳を確認" })).toHaveAttribute(
+    "href",
+    "/checklists/1/tasks/10"
+  )
   expect(screen.getByRole("cell", { name: "当月の仕訳を確認します。" })).toBeInTheDocument()
   expect(screen.getByRole("cell", { name: "2時間" })).toBeInTheDocument()
   expect(screen.getByRole("cell", { name: "1.5時間" })).toBeInTheDocument()
-  expect(screen.getByRole("link", { name: "一覧へ戻る" })).toHaveAttribute("href", "/")
-  expect(screen.getByRole("link", { name: "編集" })).toHaveAttribute("href", "/checklists/1/edit")
+  expect(screen.getByRole("link", { name: "チェックリスト一覧へ戻る" })).toHaveAttribute("href", "/")
+  expect(screen.getByRole("link", { name: "編集する" })).toHaveAttribute("href", "/checklists/1/edit")
 })
 
 test("タスクが0件の場合は空状態を表示する", async () => {
@@ -39,7 +42,7 @@ test("タスクが0件の場合は空状態を表示する", async () => {
 
   render(<ChecklistDetail checklistId="1" />)
 
-  expect(await screen.findByText("登録されているタスクはありません。")).toBeInTheDocument()
+  expect(await screen.findByText("タスクはまだ登録されていません")).toBeInTheDocument()
   expect(screen.getByText("説明はありません。")).toBeInTheDocument()
   expect(screen.queryByRole("table")).not.toBeInTheDocument()
 })

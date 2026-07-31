@@ -19,7 +19,7 @@ Content-Type: application/json
 
 | フィールド | 型 | 必須 | 制約 | 説明 |
 | --- | --- | --- | --- | --- |
-| `name` | string | 必須 | 1〜255文字 | チェックリスト名 |
+| `name` | string | 必須 | 1〜255文字、空白のみ不可 | チェックリスト名 |
 | `description` | string \| null | 任意 | 空文字列を許容 | チェックリストの説明 |
 | `backlog_project_key_or_url` | string \| null | 任意 | 自由入力 | BacklogのプロジェクトキーまたはURL |
 
@@ -56,7 +56,7 @@ Content-Type: application/json
 HTTP/1.1 422 Unprocessable Entity
 ```
 
-`name` の未指定・空文字列・256文字以上など、リクエストが制約を満たさない場合に返す。
+`name` の未指定・空文字列・空白のみ・256文字以上など、リクエストが制約を満たさない場合に返す。
 
 ## 対象外
 
