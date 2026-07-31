@@ -13,6 +13,7 @@ const previousState: ChecklistFormState = {
   values: {
     name: "以前の名前",
     description: "以前の説明",
+    backlogProjectKeyOrUrl: "PROJ",
   },
 };
 
@@ -34,6 +35,7 @@ describe("updateChecklist", () => {
       values: {
         name: "   ",
         description: "入力した説明",
+        backlogProjectKeyOrUrl: "",
       },
     });
     expect(redirectMock).not.toHaveBeenCalled();
@@ -49,12 +51,17 @@ describe("updateChecklist", () => {
     const formData = new FormData();
     formData.set("name", " 更新後の名前 ");
     formData.set("description", "   ");
+    formData.set("backlog_project_key_or_url", " https://example.backlog.com/projects/PROJ ");
 
     await expect(updateChecklist("2", previousState, formData)).rejects.toThrow(redirectError);
     expect(fetch).toHaveBeenCalledWith(new URL("http://api:8000/checklists/2"), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "更新後の名前", description: null }),
+      body: JSON.stringify({
+        name: "更新後の名前",
+        description: null,
+        backlog_project_key_or_url: " https://example.backlog.com/projects/PROJ ",
+      }),
     });
     expect(redirectMock).toHaveBeenCalledWith("/checklists/2");
   });
@@ -66,7 +73,7 @@ describe("updateChecklist", () => {
 
     await expect(updateChecklist("1", previousState, formData)).resolves.toEqual({
       errors: { name: "チェックリスト名は255文字以内で入力してください。" },
-      values: { name: "a".repeat(256), description: "入力した説明" },
+      values: { name: "a".repeat(256), description: "入力した説明", backlogProjectKeyOrUrl: "" },
     });
     expect(fetch).not.toHaveBeenCalled();
   });

@@ -17,6 +17,7 @@ test("初期値、保存操作、キャンセル先を表示する", () => {
       initialValues={{
         name: "出張の準備",
         description: "出張前に必要な手配と持ち物を確認します。",
+        backlogProjectKeyOrUrl: "PROJ",
       }}
     />,
   );
@@ -25,6 +26,7 @@ test("初期値、保存操作、キャンセル先を表示する", () => {
   expect(screen.getByLabelText(/説明/)).toHaveValue(
     "出張前に必要な手配と持ち物を確認します。",
   );
+  expect(screen.getByLabelText(/BacklogプロジェクトキーまたはURL/)).toHaveValue("PROJ");
   expect(screen.getByRole("button", { name: "保存する" })).toBeEnabled();
   expect(screen.getByRole("link", { name: "キャンセル" })).toHaveAttribute(
     "href",

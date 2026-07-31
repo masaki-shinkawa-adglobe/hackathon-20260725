@@ -15,8 +15,8 @@ const toastMock = vi.hoisted(() => ({
 
 vi.mock("sonner", () => ({ toast: toastMock }))
 
-function checklistResponse({ id = 1, name = "チェックリスト", tasks = [] }: Partial<{ id: number; name: string; tasks: unknown[] }> = {}) {
-  return new Response(JSON.stringify({ id, name, description: null, tasks }), { status: 200 })
+function checklistResponse({ id = 1, name = "チェックリスト", tasks = [], backlogProjectKeyOrUrl = null }: Partial<{ id: number; name: string; tasks: unknown[]; backlogProjectKeyOrUrl: string | null }> = {}) {
+  return new Response(JSON.stringify({ id, name, description: null, backlog_project_key_or_url: backlogProjectKeyOrUrl, tasks }), { status: 200 })
 }
 
 afterEach(() => {
@@ -31,6 +31,7 @@ test("実API形式のチェックリストとタスクを表示する", async ()
     id: 1,
     name: "月次決算",
     description: "月ごとの締め作業です。",
+    backlog_project_key_or_url: "PROJ",
     backlog_registration: { is_registered: false, link_id: null, backlog_issue_id: null, backlog_issue_key: null, backlog_issue_url: null },
     tasks: [
       { id: 10, checklist_id: 1, title: "仕訳を確認", summary: "当月の仕訳を確認します。", estimated_hours: 2 },
@@ -42,6 +43,7 @@ test("実API形式のチェックリストとタスクを表示する", async ()
 
   expect(await screen.findByRole("heading", { name: "月次決算" })).toBeInTheDocument()
   expect(screen.getByText("月ごとの締め作業です。")).toBeInTheDocument()
+  expect(screen.getByText("Backlogプロジェクト: PROJ")).toBeInTheDocument()
   expect(screen.getByRole("columnheader", { name: "タイトル" })).toBeInTheDocument()
   expect(screen.getByRole("link", { name: "仕訳を確認" })).toHaveAttribute(
     "href",
@@ -62,6 +64,7 @@ test("タスクが0件の場合は空状態を表示する", async () => {
 
   expect(await screen.findByText("タスクはまだ登録されていません")).toBeInTheDocument()
   expect(screen.getByText("説明はありません。")).toBeInTheDocument()
+  expect(screen.getByText("Backlogプロジェクト: 未設定")).toBeInTheDocument()
   expect(screen.queryByRole("table")).not.toBeInTheDocument()
 })
 

@@ -164,6 +164,7 @@ async def get_checklist(
         name=checklist.name,
         description=checklist.description,
         assignee_count=checklist.assignee_count,
+        backlog_project_key_or_url=checklist.backlog_project_key_or_url,
         backlog_registration=backlog_registration(checklist.backlog_link),
         tasks=checklist.tasks,
     )

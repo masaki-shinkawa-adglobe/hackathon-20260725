@@ -14,6 +14,7 @@ const initialChecklistFormState: ChecklistFormState = {
   values: {
     name: "",
     description: "",
+    backlogProjectKeyOrUrl: "",
   },
 };
 
@@ -59,6 +60,20 @@ export function ChecklistForm() {
             {state.errors.name}
           </p>
         )}
+      </div>
+
+      <div>
+        <label htmlFor="backlog_project_key_or_url" className="block text-sm font-semibold text-slate-800">
+          BacklogプロジェクトキーまたはURL <span className="text-slate-500">（任意）</span>
+        </label>
+        <input
+          id="backlog_project_key_or_url"
+          name="backlog_project_key_or_url"
+          type="text"
+          defaultValue={state.values.backlogProjectKeyOrUrl}
+          className="mt-2 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+          placeholder="例: PROJ または https://example.backlog.com/projects/PROJ"
+        />
       </div>
 
       <div>

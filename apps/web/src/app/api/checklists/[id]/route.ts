@@ -16,11 +16,12 @@ type RouteContext = {
 function isChecklistDetail(body: unknown): boolean {
   if (!body || typeof body !== "object") return false
 
-  const checklist = body as { id?: unknown; name?: unknown; description?: unknown; tasks?: unknown }
+  const checklist = body as { id?: unknown; name?: unknown; description?: unknown; backlog_project_key_or_url?: unknown; tasks?: unknown }
   return (
     typeof checklist.id === "number" &&
     typeof checklist.name === "string" &&
     (typeof checklist.description === "string" || checklist.description === null) &&
+    (typeof checklist.backlog_project_key_or_url === "string" || checklist.backlog_project_key_or_url === null) &&
     Array.isArray(checklist.tasks) &&
     checklist.tasks.every((task) => {
       if (!task || typeof task !== "object") return false

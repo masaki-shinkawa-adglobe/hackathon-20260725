@@ -63,6 +63,20 @@ export function ChecklistForm({ checklistId, initialValues }: ChecklistFormProps
       </div>
 
       <div>
+        <label htmlFor="backlog_project_key_or_url" className="block text-sm font-semibold text-foreground">
+          BacklogプロジェクトキーまたはURL <span className="text-muted-foreground">（任意）</span>
+        </label>
+        <Input
+          id="backlog_project_key_or_url"
+          name="backlog_project_key_or_url"
+          type="text"
+          defaultValue={state.values.backlogProjectKeyOrUrl}
+          className="mt-2"
+          placeholder="例: PROJ または https://example.backlog.com/projects/PROJ"
+        />
+      </div>
+
+      <div>
         <label htmlFor="description" className="block text-sm font-semibold text-foreground">
           説明 <span className="text-muted-foreground">（任意）</span>
         </label>

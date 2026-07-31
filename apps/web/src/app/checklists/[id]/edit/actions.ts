@@ -9,6 +9,7 @@ export type ChecklistFormState = {
   values: {
     name: string;
     description: string;
+    backlogProjectKeyOrUrl: string;
   };
 };
 
@@ -19,6 +20,7 @@ export async function updateChecklist(
 ): Promise<ChecklistFormState> {
   const name = String(formData.get("name") ?? "");
   const description = String(formData.get("description") ?? "");
+  const backlogProjectKeyOrUrl = String(formData.get("backlog_project_key_or_url") ?? "");
   const trimmedName = name.trim();
 
   if (!trimmedName) {
@@ -29,6 +31,7 @@ export async function updateChecklist(
       values: {
         name,
         description,
+        backlogProjectKeyOrUrl,
       },
     };
   }
@@ -41,6 +44,7 @@ export async function updateChecklist(
       values: {
         name,
         description,
+        backlogProjectKeyOrUrl,
       },
     };
   }
@@ -56,11 +60,12 @@ export async function updateChecklist(
     body: JSON.stringify({
       name: trimmedName,
       description: description.trim() || null,
+      backlog_project_key_or_url: backlogProjectKeyOrUrl.trim() === "" ? null : backlogProjectKeyOrUrl,
     }),
   });
 
   if (!response.ok) {
-    return { errors: {}, values: { name, description } };
+    return { errors: {}, values: { name, description, backlogProjectKeyOrUrl } };
   }
 
   redirect(`/checklists/${id}`);
