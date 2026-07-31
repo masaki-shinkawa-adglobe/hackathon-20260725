@@ -2,7 +2,9 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
 
+import { AIBulkTasksDialog, type AIBulkTask } from "@/components/ai-bulk-tasks-dialog"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -31,22 +33,37 @@ export function ChecklistDetail({ checklistId }: ChecklistDetailProps) {
   const [checklist, setChecklist] = useState<Checklist | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
+  const [isAIBulkTasksDialogOpen, setIsAIBulkTasksDialogOpen] = useState(false)
 
-  const loadChecklist = useCallback(async () => {
-    setIsLoading(true)
-    setHasError(false)
+  const loadChecklist = useCallback(async ({ preserveOnError = false } = {}) => {
+    if (!preserveOnError) {
+      setIsLoading(true)
+      setHasError(false)
+    }
 
     try {
       const response = await fetch(`/api/checklists/${encodeURIComponent(checklistId)}`)
       if (!response.ok) throw new Error("Failed to fetch checklist")
       setChecklist((await response.json()) as Checklist)
+      return true
     } catch {
-      setChecklist(null)
-      setHasError(true)
+      if (!preserveOnError) {
+        setChecklist(null)
+        setHasError(true)
+      }
+      return false
     } finally {
-      setIsLoading(false)
+      if (!preserveOnError) setIsLoading(false)
     }
   }, [checklistId])
+
+  const handleAIBulkTasksSuccess = async (tasks: AIBulkTask[]) => {
+    toast.success(`${tasks.length}件のタスクを登録しました`)
+    const didRefresh = await loadChecklist({ preserveOnError: true })
+    if (!didRefresh) {
+      toast.warning("登録は完了しましたが、一覧を更新できませんでした。画面を再読み込みしてください")
+    }
+  }
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -99,7 +116,10 @@ export function ChecklistDetail({ checklistId }: ChecklistDetailProps) {
                 <h2 id="task-list-heading" className="text-xl font-semibold text-foreground">
                   タスク
                 </h2>
-                <span className="text-sm text-muted-foreground">{checklist.tasks.length}件</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">{checklist.tasks.length}件</span>
+                  <Button onClick={() => setIsAIBulkTasksDialogOpen(true)}>AIでタスクを一括登録</Button>
+                </div>
               </div>
               {checklist.tasks.length === 0 ? (
                 <p className="mt-4 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -141,6 +161,13 @@ export function ChecklistDetail({ checklistId }: ChecklistDetailProps) {
                 </div>
               )}
             </section>
+
+            <AIBulkTasksDialog
+              checklistId={checklist.id}
+              open={isAIBulkTasksDialogOpen}
+              onOpenChange={setIsAIBulkTasksDialogOpen}
+              onSuccess={handleAIBulkTasksSuccess}
+            />
           </>
         )}
 
