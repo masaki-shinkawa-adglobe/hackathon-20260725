@@ -42,10 +42,11 @@ def client(session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[T
 
 
 async def add_checklist(
-    session_factory: async_sessionmaker[AsyncSession], *, name: str = "月次決算", description: str | None = "概要"
+    session_factory: async_sessionmaker[AsyncSession], *, name: str = "月次決算", description: str | None = "概要",
+    assignee_count: int = 1,
 ) -> Checklist:
     async with session_factory() as session:
-        checklist = Checklist(name=name, description=description)
+        checklist = Checklist(name=name, description=description, assignee_count=assignee_count)
         session.add(checklist)
         await session.commit()
         await session.refresh(checklist)
@@ -136,6 +137,21 @@ async def test_backlog_link_is_unique_and_deleted_with_checklist(
 
 def test_list_checklists_returns_empty(client: TestClient) -> None:
     assert client.get("/checklists").json() == {"checklists": []}
+
+
+def test_checklist_get_response_openapi_schemas() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    list_item = schemas["ChecklistListItemResponse"]["properties"]
+    detail = schemas["ChecklistDetailResponse"]["properties"]
+
+    assert "assignee_count" in list_item
+    assert list_item["backlog_last_registered_at"] == {
+        "anyOf": [{"type": "string", "format": "date-time"}, {"type": "null"}],
+        "title": "Backlog Last Registered At",
+    }
+    assert "backlog_registration" not in list_item
+    assert "assignee_count" in detail
+    assert "backlog_registration" in detail
 
 
 @pytest.mark.asyncio
@@ -262,11 +278,11 @@ def test_delete_checklist_returns_not_found(client: TestClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_checklists_includes_task_count_and_registration(
+async def test_list_checklists_includes_task_count_assignee_count_and_backlog_registration_time(
     client: TestClient, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    registered = await add_checklist(session_factory, name="登録済み")
-    unregistered = await add_checklist(session_factory, name="未登録")
+    registered = await add_checklist(session_factory, name="登録済み", assignee_count=3)
+    unregistered = await add_checklist(session_factory, name="未登録", assignee_count=2)
     link = await add_backlog_link(session_factory, registered.id)
     async with session_factory() as session:
         session.add_all([
@@ -282,16 +298,14 @@ async def test_list_checklists_includes_task_count_and_registration(
     assert checklists[0]["id"] == registered.id
     assert checklists[0]["name"] == "登録済み"
     assert checklists[0]["task_count"] == 2
-    assert checklists[0]["backlog_registration"] == {
-        "is_registered": True, "link_id": link.id, "backlog_issue_id": 12345,
-        "backlog_issue_key": "PROJ-100", "backlog_issue_url": "https://example.backlog.com/view/PROJ-100",
-    }
+    assert checklists[0]["assignee_count"] == 3
+    assert checklists[0]["backlog_last_registered_at"] == link.registered_at.isoformat()
+    assert "backlog_registration" not in checklists[0]
     assert checklists[1]["id"] == unregistered.id
     assert checklists[1]["task_count"] == 0
-    assert checklists[1]["backlog_registration"] == {
-        "is_registered": False, "link_id": None, "backlog_issue_id": None,
-        "backlog_issue_key": None, "backlog_issue_url": None,
-    }
+    assert checklists[1]["assignee_count"] == 2
+    assert checklists[1]["backlog_last_registered_at"] is None
+    assert "backlog_registration" not in checklists[1]
 
 
 @pytest.mark.asyncio
@@ -320,7 +334,9 @@ async def test_list_checklists_uses_one_query_regardless_of_checklist_count(
 async def test_get_checklist_returns_detail_tasks_and_registration(
     client: TestClient, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    checklist = await add_checklist(session_factory, description="月次決算の標準チェックリスト")
+    checklist = await add_checklist(
+        session_factory, description="月次決算の標準チェックリスト", assignee_count=3
+    )
     link = await add_backlog_link(session_factory, checklist.id)
     async with session_factory() as session:
         session.add(Task(checklist_id=checklist.id, title="仕訳確認", summary="仕訳を確認する", estimated_hours=2))
@@ -331,6 +347,7 @@ async def test_get_checklist_returns_detail_tasks_and_registration(
     assert response.status_code == 200
     assert response.json() == {
         "id": checklist.id, "name": "月次決算", "description": "月次決算の標準チェックリスト",
+        "assignee_count": 3,
         "backlog_registration": {
             "is_registered": True, "link_id": link.id, "backlog_issue_id": 12345,
             "backlog_issue_key": "PROJ-100", "backlog_issue_url": "https://example.backlog.com/view/PROJ-100",
@@ -349,6 +366,7 @@ async def test_get_checklist_returns_empty_tasks_and_unregistered_values(
 
     assert response.status_code == 200
     assert response.json()["description"] is None
+    assert response.json()["assignee_count"] == 1
     assert response.json()["tasks"] == []
     assert response.json()["backlog_registration"] == {
         "is_registered": False, "link_id": None, "backlog_issue_id": None,
