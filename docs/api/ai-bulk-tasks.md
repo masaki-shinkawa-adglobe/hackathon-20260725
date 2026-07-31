@@ -2,37 +2,13 @@
 
 ## 概要
 
-既存チェックリストに対して、利用者の自由記述をGemini AIで複数タスクへ分解し、対象チェックリストに紐づくタスクとして一括登録する。
-
-自由記述のJSON入力に加え、資料ファイルをアップロードしてタスクを生成できる。
+既存チェックリストに対して、利用者の自由記述または資料ファイルをGemini AIで複数タスクへ分解し、対象チェックリストに紐づくタスクとして一括登録する。
 
 ## エンドポイント
 
 ```http
 POST /checklists/ai-bulk-tasks
-Content-Type: application/json または multipart/form-data
-```
-
-## リクエスト（JSON）
-
-| フィールド | 型 | 必須 | 制約 | 説明 |
-| --- | --- | --- | --- | --- |
-| `checklist_id` | integer | 必須 | 既存チェックリストID | タスクを登録する対象チェックリスト |
-| `description` | string \| null | 任意 | 最大10,000文字 | タスク分解に使う自由記述 |
-
-```json
-{
-  "checklist_id": 1,
-  "description": "月次決算の作業を、担当者が順番に実行できる粒度のタスクへ分解してください。"
-}
-```
-
-`description` は省略できる。
-
-```json
-{
-  "checklist_id": 1
-}
+Content-Type: multipart/form-data
 ```
 
 ## リクエスト（multipart/form-data）
@@ -40,10 +16,10 @@ Content-Type: application/json または multipart/form-data
 | フィールド | 型 | 必須 | 制約 | 説明 |
 | --- | --- | --- | --- | --- |
 | `checklist_id` | integer | 必須 | 既存チェックリストID | タスクを登録する対象チェックリスト |
-| `description` | string \| null | 任意 | 最大10,000文字 | 資料ファイルと併用する補足指示 |
-| `file` | file | 必須 | 単一ファイル、10 MiB以下 | タスク分解に使う資料 |
+| `description` | string \| null | 条件付き必須 | 最大10,000文字 | タスク分解に使う自由記述または資料ファイルと併用する補足指示 |
+| `file` | file | 条件付き必須 | 単一ファイル、10 MiB以下 | タスク分解に使う資料 |
 
-`description` は省略できる。対応形式はPDF、XLSX、CSV、TXTである。PDFはGeminiへ文書として渡し、XLSXは全ワークシートをCSV相当のテキストへ抽出して渡す。CSV/TXTはUTF-8（BOM可）に限る。
+`description` と `file` のどちらか一方は必須である。両方を同時に送ることもできる。対応形式はPDF、XLSX、CSV、TXTである。PDFはGeminiへ文書として渡し、XLSXは全ワークシートをCSV相当のテキストへ抽出して渡す。CSV/TXTはUTF-8（BOM可）に限る。
 
 ## 成功レスポンス
 
@@ -163,7 +139,7 @@ HTTP/1.1 422 Unprocessable Entity
 Content-Type: application/json
 ```
 
-FastAPI/Pydantic標準のバリデーションエラー形式を返す。例として、`checklist_id` 未指定、`description` が10,000文字を超える場合に発生する。
+FastAPI/Pydantic標準のバリデーションエラー形式または `detail` 文字列を返す。例として、`checklist_id` 未指定、`description` が10,000文字を超える、`description` と `file` がどちらも未指定の場合に発生する。
 
 ### ファイル形式・内容エラー
 
@@ -177,11 +153,8 @@ FastAPI/Pydantic標準のバリデーションエラー形式を返す。例と�
 
 ```bash
 curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "checklist_id": 1,
-    "description": "月次決算の作業を、担当者が順番に実行できる粒度のタスクへ分解してください。"
-  }'
+  -F 'checklist_id=1' \
+  -F 'description=月次決算の作業を、担当者が順番に実行できる粒度のタスクへ分解してください。'
 ```
 
 ```bash
@@ -198,7 +171,8 @@ curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
 - 実行ボタンは二重送信を避けるため、リクエスト中はdisabledにする。
 - 成功時は返却された `tasks` を画面へ反映する。
 - `502` と `503` はAI連携起因として利用者へ再試行可能なエラーとして表示する。
-- JSON入力とファイル入力は同じエンドポイントであり、ファイル入力時も `description` を補足指示として送れる。
+- リクエストは常に `multipart/form-data` で送る。
+- `description` と `file` がどちらも空の場合は送信前にエラー表示する。
 
 ## 環境変数
 

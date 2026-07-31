@@ -83,7 +83,10 @@ async def test_creates_generated_tasks_for_existing_checklist(
 
     response = client.post(
         "/checklists/ai-bulk-tasks",
-        json={"checklist_id": checklist.id, "description": "月末処理を分解"},
+        files={
+            "checklist_id": (None, str(checklist.id)),
+            "description": (None, "月末処理を分解"),
+        },
     )
 
     assert response.status_code == 200
@@ -103,11 +106,78 @@ async def test_creates_generated_tasks_for_existing_checklist(
 
 
 def test_requires_checklist_id(client: TestClient) -> None:
-    assert client.post("/checklists/ai-bulk-tasks", json={}).status_code == 422
+    assert client.post(
+        "/checklists/ai-bulk-tasks",
+        files={"description": (None, "月末処理を分解")},
+    ).status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_invalid_json_returns_422_without_persisting_tasks(
+async def test_rejects_json_content_type_without_persisting_tasks(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    response = client.post(
+        "/checklists/ai-bulk-tasks",
+        json={"checklist_id": 1, "description": "月末処理を分解"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Content-Type must be multipart/form-data"
+    async with session_factory() as session:
+        assert await session.scalar(select(func.count()).select_from(Task)) == 0
+
+
+@pytest.mark.asyncio
+async def test_rejects_missing_description_and_file_without_persisting_tasks(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    checklist = await create_checklist(session_factory)
+
+    response = client.post(
+        "/checklists/ai-bulk-tasks",
+        files={"checklist_id": (None, str(checklist.id))},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Either description or file is required"
+    async with session_factory() as session:
+        assert await session.scalar(select(func.count()).select_from(Task)) == 0
+
+
+@pytest.mark.asyncio
+async def test_rejects_blank_description_without_file_without_persisting_tasks(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    checklist = await create_checklist(session_factory)
+
+    response = client.post(
+        "/checklists/ai-bulk-tasks",
+        files={"checklist_id": (None, str(checklist.id)), "description": (None, "   ")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Either description or file is required"
+    async with session_factory() as session:
+        assert await session.scalar(select(func.count()).select_from(Task)) == 0
+
+
+@pytest.mark.asyncio
+async def test_rejects_urlencoded_content_type_without_persisting_tasks(
+    client: TestClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    response = client.post(
+        "/checklists/ai-bulk-tasks",
+        data={"checklist_id": "1", "description": "月末処理を分解"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Content-Type must be multipart/form-data"
+    async with session_factory() as session:
+        assert await session.scalar(select(func.count()).select_from(Task)) == 0
+
+
+@pytest.mark.asyncio
+async def test_rejects_invalid_json_content_type_without_persisting_tasks(
     client: TestClient, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     response = client.post(
@@ -117,7 +187,7 @@ async def test_invalid_json_returns_422_without_persisting_tasks(
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"][0]["type"] == "json_invalid"
+    assert response.json()["detail"] == "Content-Type must be multipart/form-data"
     async with session_factory() as session:
         assert await session.scalar(select(func.count()).select_from(Task)) == 0
 
@@ -133,18 +203,17 @@ async def test_invalid_utf8_json_returns_422_without_persisting_tasks(
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"][0]["type"] == "json_invalid"
+    assert response.json()["detail"] == "Content-Type must be multipart/form-data"
     async with session_factory() as session:
         assert await session.scalar(select(func.count()).select_from(Task)) == 0
 
 
-def test_ai_bulk_tasks_openapi_declares_json_and_multipart_request_bodies() -> None:
+def test_ai_bulk_tasks_openapi_declares_multipart_request_body() -> None:
     request_body = app.openapi()["paths"]["/checklists/ai-bulk-tasks"]["post"]["requestBody"]
     content = request_body["content"]
 
-    assert set(content) == {"application/json", "multipart/form-data"}
-    assert content["application/json"]["schema"]["required"] == ["checklist_id"]
-    assert content["multipart/form-data"]["schema"]["required"] == ["checklist_id", "file"]
+    assert set(content) == {"multipart/form-data"}
+    assert content["multipart/form-data"]["schema"]["required"] == ["checklist_id"]
     assert content["multipart/form-data"]["schema"]["properties"]["description"] == {
         "type": ["string", "null"],
         "maxLength": 10_000,
@@ -156,7 +225,10 @@ def test_ai_bulk_tasks_openapi_declares_json_and_multipart_request_bodies() -> N
 
 
 def test_returns_not_found_before_gemini_configuration(client: TestClient) -> None:
-    response = client.post("/checklists/ai-bulk-tasks", json={"checklist_id": 999})
+    response = client.post(
+        "/checklists/ai-bulk-tasks",
+        files={"checklist_id": (None, "999"), "description": (None, "月末処理を分解")},
+    )
     assert response.status_code == 404
 
 
@@ -178,7 +250,10 @@ async def test_gemini_failures_do_not_create_tasks(
     checklist = await create_checklist(session_factory)
     app.dependency_overrides[get_task_generator] = lambda: StubGenerator(error)
 
-    response = client.post("/checklists/ai-bulk-tasks", json={"checklist_id": checklist.id})
+    response = client.post(
+        "/checklists/ai-bulk-tasks",
+        files={"checklist_id": (None, str(checklist.id)), "description": (None, "月末処理を分解")},
+    )
 
     assert response.status_code in (502, 503)
     assert response.json()["detail"]["code"] == expected_code
@@ -193,7 +268,10 @@ async def test_invalid_or_empty_ai_output_is_not_persisted(
     checklist = await create_checklist(session_factory)
     app.dependency_overrides[get_task_generator] = lambda: StubGenerator([])
 
-    response = client.post("/checklists/ai-bulk-tasks", json={"checklist_id": checklist.id})
+    response = client.post(
+        "/checklists/ai-bulk-tasks",
+        files={"checklist_id": (None, str(checklist.id)), "description": (None, "月末処理を分解")},
+    )
 
     assert response.status_code == 502
     assert response.json()["detail"]["code"] == "invalid_ai_response"
@@ -229,7 +307,10 @@ async def test_non_finite_ai_hours_return_error_without_persisting_tasks(
     generator._request = lambda *_: response_text  # type: ignore[method-assign]
     app.dependency_overrides[get_task_generator] = lambda: generator
 
-    response = client.post("/checklists/ai-bulk-tasks", json={"checklist_id": checklist.id})
+    response = client.post(
+        "/checklists/ai-bulk-tasks",
+        files={"checklist_id": (None, str(checklist.id)), "description": (None, "月末処理を分解")},
+    )
 
     assert response.status_code == 502
     assert response.json()["detail"]["code"] == "invalid_ai_response"
