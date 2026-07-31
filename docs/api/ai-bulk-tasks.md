@@ -4,16 +4,16 @@
 
 既存チェックリストに対して、利用者の自由記述をGemini AIで複数タスクへ分解し、対象チェックリストに紐づくタスクとして一括登録する。
 
-ファイルアップロードは本APIの対象外とし、別Issueで扱う。
+自由記述のJSON入力に加え、資料ファイルをアップロードしてタスクを生成できる。
 
 ## エンドポイント
 
 ```http
 POST /checklists/ai-bulk-tasks
-Content-Type: application/json
+Content-Type: application/json または multipart/form-data
 ```
 
-## リクエスト
+## リクエスト（JSON）
 
 | フィールド | 型 | 必須 | 制約 | 説明 |
 | --- | --- | --- | --- | --- |
@@ -34,6 +34,15 @@ Content-Type: application/json
   "checklist_id": 1
 }
 ```
+
+## リクエスト（multipart/form-data）
+
+| フィールド | 型 | 必須 | 制約 | 説明 |
+| --- | --- | --- | --- | --- |
+| `checklist_id` | integer | 必須 | 既存チェックリストID | タスクを登録する対象チェックリスト |
+| `file` | file | 必須 | 単一ファイル、10 MiB以下 | タスク分解に使う資料 |
+
+対応形式はPDF、XLSX、CSV、TXTである。PDFはGeminiへ文書として渡し、XLSXは全ワークシートをCSV相当のテキストへ抽出して渡す。CSV/TXTはUTF-8（BOM可）に限る。
 
 ## 成功レスポンス
 
@@ -155,6 +164,14 @@ Content-Type: application/json
 
 FastAPI/Pydantic標準のバリデーションエラー形式を返す。例として、`checklist_id` 未指定、`description` が10,000文字を超える場合に発生する。
 
+### ファイル形式・内容エラー
+
+- 非対応の拡張子またはMIME型の不一致は `415 Unsupported Media Type`
+- 10 MiBを超えるファイルは `413 Payload Too Large`
+- UTF-8ではないCSV/TXT、壊れたXLSX、multipartの必須項目不足は `422 Unprocessable Entity`
+
+いずれの失敗時もタスクは永続化されない。
+
 ## cURL例
 
 ```bash
@@ -166,6 +183,12 @@ curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
   }'
 ```
 
+```bash
+curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
+  -F 'checklist_id=1' \
+  -F 'file=@./monthly-close.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+```
+
 ## フロントエンド実装メモ
 
 - 本APIはチェックリストを新規作成しない。
@@ -173,7 +196,7 @@ curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
 - 実行ボタンは二重送信を避けるため、リクエスト中はdisabledにする。
 - 成功時は返却された `tasks` を画面へ反映する。
 - `502` と `503` はAI連携起因として利用者へ再試行可能なエラーとして表示する。
-- ファイルアップロードでの一括登録は別APIとして設計する。
+- JSON入力とファイル入力は同じエンドポイントであり、ファイル入力時は `description` を送らない。
 
 ## 環境変数
 
