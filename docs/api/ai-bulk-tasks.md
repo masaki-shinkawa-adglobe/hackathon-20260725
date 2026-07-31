@@ -160,7 +160,7 @@ curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
 ```bash
 curl -X POST http://localhost:8000/checklists/ai-bulk-tasks \
   -F 'checklist_id=1' \
-  -F 'description=月次決算の作業を、以下PDFを参考にタスク分解してください。' \
+  -F 'description=月次決算の作業を、以下Excelファイルを参考にタスク分解してください。' \
   -F 'file=@./monthly-close.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ```
 

@@ -10,13 +10,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { findChecklistById } from "@/lib/checklist-mocks"
+import { findChecklistById } from "@/lib/checklist-mock-data"
 
-export default async function ChecklistDetailPage({
-  params,
-}: {
+type ChecklistDetailPageProps = {
   params: Promise<{ id: string }>
-}) {
+}
+
+export default async function ChecklistDetailPage({ params }: ChecklistDetailPageProps) {
   const { id } = await params
   const checklist = findChecklistById(id)
 
@@ -25,56 +25,62 @@ export default async function ChecklistDetailPage({
   }
 
   return (
-    <main className="min-h-screen bg-background px-6 py-12">
+    <main className="min-h-screen bg-background px-4 py-10 sm:px-6 sm:py-16">
       <div className="mx-auto max-w-5xl">
-        <div className="flex items-start justify-between gap-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm font-semibold tracking-wide text-primary">CHECKLISTS</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               {checklist.name}
             </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
+              {checklist.description}
+            </p>
           </div>
-          <Button asChild>
-            <Link href={`/checklists/${checklist.id}/edit`}>編集</Link>
+          <Button asChild variant="outline">
+            <Link href={`/checklists/${checklist.id}/edit`}>編集する</Link>
           </Button>
         </div>
 
-        <section className="mt-8 rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-card-foreground">基本情報</h2>
-          <dl className="mt-5 space-y-4">
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">名称</dt>
-              <dd className="mt-1 text-base text-card-foreground">{checklist.name}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">説明</dt>
-              <dd className="mt-1 leading-6 text-card-foreground">{checklist.description}</dd>
-            </div>
-          </dl>
-        </section>
+        <section className="mt-10" aria-labelledby="task-list-heading">
+          <div className="flex items-center justify-between gap-4">
+            <h2 id="task-list-heading" className="text-xl font-semibold text-foreground">
+              タスク
+            </h2>
+            <span className="text-sm text-muted-foreground">{checklist.tasks.length}件</span>
+          </div>
 
-        <section className="mt-8 rounded-xl border border-border bg-card p-6 shadow-sm" aria-labelledby="tasks-heading">
-          <h2 id="tasks-heading" className="text-lg font-semibold text-card-foreground">
-            タスク一覧
-          </h2>
           {checklist.tasks.length === 0 ? (
-            <p className="mt-5 text-sm text-muted-foreground">タスクはまだ登録されていません</p>
+            <p className="mt-4 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-8 text-center text-sm text-muted-foreground">
+              タスクはまだ登録されていません
+            </p>
           ) : (
-            <div className="mt-5">
-              <Table className="min-w-[700px]">
+            <div className="mt-4 rounded-lg border border-border bg-card">
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>タイトル</TableHead>
-                    <TableHead>概要</TableHead>
-                    <TableHead>工数</TableHead>
+                    <TableHead scope="col">タイトル</TableHead>
+                    <TableHead scope="col">概要</TableHead>
+                    <TableHead scope="col" className="text-right">
+                      工数
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {checklist.tasks.map((task) => (
                     <TableRow key={task.id}>
-                      <TableCell className="font-medium text-card-foreground">{task.title}</TableCell>
-                      <TableCell className="whitespace-normal text-muted-foreground">{task.summary}</TableCell>
-                      <TableCell>{task.estimatedHours}時間</TableCell>
+                      <TableCell className="font-medium text-foreground">
+                        <Link
+                          href={`/checklists/${checklist.id}/tasks/${task.id}`}
+                          className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {task.title}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="whitespace-normal text-muted-foreground">
+                        {task.summary}
+                      </TableCell>
+                      <TableCell className="text-right">{task.estimatedHours}時間</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -83,9 +89,11 @@ export default async function ChecklistDetailPage({
           )}
         </section>
 
-        <Button asChild variant="outline" className="mt-8">
-          <Link href="/">一覧へ戻る</Link>
-        </Button>
+        <div className="mt-10">
+          <Button asChild variant="link" className="px-0">
+            <Link href="/">チェックリスト一覧へ戻る</Link>
+          </Button>
+        </div>
       </div>
     </main>
   )

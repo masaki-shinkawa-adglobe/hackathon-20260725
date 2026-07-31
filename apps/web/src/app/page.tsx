@@ -1,130 +1,161 @@
-type HealthResult =
-  | { ok: true }
-  | {
-      ok: false;
-      message: string;
-    };
+"use client"
 
-export const dynamic = "force-dynamic";
+import * as React from "react"
+import Link from "next/link"
+import { PlusIcon } from "lucide-react"
 
-async function getHealth(): Promise<HealthResult> {
-  const internalApiUrl = process.env.INTERNAL_API_URL;
+import { AppBreadcrumb } from "@/components/app-breadcrumb"
+import { AppSidebar } from "@/components/app-sidebar"
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/data-table"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
-  if (!internalApiUrl) {
-    return {
-      ok: false,
-      message: "内部 API の接続先が設定されていません。",
-    };
-  }
-
-  try {
-    const response = await fetch(new URL("/health", internalApiUrl), {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        message: `ヘルスチェックが HTTP ${response.status} を返しました。`,
-      };
-    }
-
-    const body: unknown = await response.json();
-    if (
-      typeof body !== "object" ||
-      body === null ||
-      !("status" in body) ||
-      body.status !== "ok"
-    ) {
-      return {
-        ok: false,
-        message: "ヘルスチェックの応答が正常ではありません。",
-      };
-    }
-
-    return { ok: true };
-  } catch {
-    return {
-      ok: false,
-      message: "内部 API へ接続できないか、応答を読み取れませんでした。",
-    };
-  }
+type Checklist = {
+  id: string
+  name: string
+  taskCount: number
+  backlogLastRegisteredAt: string
+  updatedAt: string
 }
 
-function StatusCard({
-  name,
-  healthy,
-  description,
-}: {
-  name: string;
-  healthy: boolean;
-  description: string;
-}) {
+const checklists: Checklist[] = [
+  {
+    id: "business-trip",
+    name: "出張の準備",
+    taskCount: 6,
+    backlogLastRegisteredAt: "2026年7月30日 13:45",
+    updatedAt: "2026年7月30日 14:30",
+  },
+  {
+    id: "new-employee",
+    name: "新入社員の受け入れ",
+    taskCount: 8,
+    backlogLastRegisteredAt: "2026年7月29日 09:50",
+    updatedAt: "2026年7月29日 10:15",
+  },
+  {
+    id: "monthly-closing",
+    name: "月次締め作業",
+    taskCount: 5,
+    backlogLastRegisteredAt: "2026年7月28日 16:30",
+    updatedAt: "2026年7月28日 17:45",
+  },
+]
+
+const columns: DataTableColumn<Checklist>[] = [
+  {
+    id: "name",
+    header: "チェックリスト名",
+    cell: (checklist) => (
+      <span className="font-medium text-foreground">{checklist.name}</span>
+    ),
+  },
+  {
+    id: "taskCount",
+    header: "登録タスク数",
+    cell: (checklist) => (
+      <span className="block text-right tabular-nums">{checklist.taskCount}</span>
+    ),
+  },
+  {
+    id: "backlogLastRegisteredAt",
+    header: "Backlog最終登録日時",
+    cell: (checklist) => (
+      <span className="text-muted-foreground">
+        {checklist.backlogLastRegisteredAt}
+      </span>
+    ),
+  },
+  {
+    id: "updatedAt",
+    header: "最終更新日時",
+    cell: (checklist) => (
+      <span className="text-muted-foreground">{checklist.updatedAt}</span>
+    ),
+  },
+]
+
+export default function Home() {
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const [searchInputValue, setSearchInputValue] = React.useState("")
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInputValue)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchInputValue])
+
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase("ja-JP")
+  const filteredChecklists = checklists.filter((checklist) =>
+    checklist.name.toLocaleLowerCase("ja-JP").includes(normalizedQuery)
+  )
+
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-xl font-semibold text-slate-900">{name}</h2>
-        <span
-          className={`rounded-full px-3 py-1 text-sm font-medium ${
-            healthy
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-rose-100 text-rose-800"
-          }`}
-        >
-          {healthy ? "正常" : "異常"}
-        </span>
-      </div>
-      <p className="mt-4 text-sm leading-6 text-slate-600">{description}</p>
-    </article>
-  );
-}
-
-export default async function Home() {
-  const health = await getHealth();
-
-  return (
-    <main className="mx-auto flex min-h-screen max-w-5xl items-center px-6 py-16">
-      <div className="w-full">
-        <p className="text-sm font-semibold tracking-widest text-blue-700 uppercase">
-          Local development
-        </p>
-        <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
-          開発環境ステータス
-        </h1>
-        <p className="mt-4 max-w-2xl leading-7 text-slate-600">
-          Next.js の Server Component からバックエンドの疎通状態を確認しています。
-        </p>
-
-        {!health.ok && (
-          <div
-            role="alert"
-            className="mt-8 rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-900"
-          >
-            {health.message}
+    <SidebarProvider className="bg-muted/30">
+      <AppSidebar />
+      <SidebarInset className="min-h-svh bg-transparent">
+        <main className="w-full px-12 py-8">
+          <div className="flex items-center justify-between gap-6">
+            <AppBreadcrumb items={[{ label: "チェックリスト一覧" }]} />
+            <Button
+              asChild
+              variant="outline"
+              className="h-12 w-40 border-orange-500 text-base font-semibold text-orange-600 hover:border-orange-600 hover:bg-orange-50 hover:text-orange-700"
+            >
+              <Link href="/checklists/new">
+                <PlusIcon aria-hidden="true" className="size-5" />
+                新規作成
+              </Link>
+            </Button>
           </div>
-        )}
 
-        <section className="mt-8 grid gap-5 md:grid-cols-2">
-          <StatusCard
-            name="FastAPI"
-            healthy={health.ok}
-            description={
-              health.ok
-                ? "GET /health が正常に応答しています。"
-                : "API の正常な応答を確認できません。"
-            }
-          />
-          <StatusCard
-            name="PostgreSQL"
-            healthy={health.ok}
-            description={
-              health.ok
-                ? "FastAPI のヘルスチェックを通じて接続を確認しました。"
-                : "データベース接続の正常性を確認できません。"
-            }
-          />
-        </section>
-      </div>
-    </main>
-  );
+          <section
+            className="mt-6 rounded-xl border border-border bg-card p-8 shadow-sm"
+            aria-labelledby="checklist-search-heading"
+          >
+            <label
+              id="checklist-search-heading"
+              className="grid max-w-xl gap-3 text-base font-semibold text-foreground"
+              htmlFor="checklist-search"
+            >
+              キーワード
+              <Input
+                id="checklist-search"
+                type="search"
+                value={searchInputValue}
+                placeholder="チェックリスト名で検索"
+                onChange={(event) => setSearchInputValue(event.target.value)}
+                aria-label="検索"
+                className="h-15 px-4 text-base"
+              />
+            </label>
+          </section>
+
+          <section
+            className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm [&>div]:space-y-0 [&_table]:border-collapse [&_table]:text-base [&_thead]:bg-muted/50 [&_th]:h-16 [&_th]:px-6 [&_th]:text-sm [&_th]:font-semibold [&_th]:text-muted-foreground [&_td]:px-6 [&_td]:py-6 [&_tbody_tr:last-child]:border-b-0"
+            aria-labelledby="checklist-table-heading"
+          >
+            <h1 id="checklist-table-heading" className="sr-only">
+              チェックリスト一覧
+            </h1>
+            <DataTable
+              columns={columns}
+              data={filteredChecklists}
+              getRowKey={(checklist) => checklist.id}
+              emptyMessage="該当するチェックリストがありません。"
+            />
+          </section>
+          <p aria-live="polite" className="mt-5 text-base font-semibold text-foreground">
+            全 {filteredChecklists.length} 件
+          </p>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
+  )
 }
