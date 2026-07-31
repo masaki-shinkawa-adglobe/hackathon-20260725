@@ -170,9 +170,9 @@ POST /checklists/{checklist_id}/backlog-plans/{plan_id}/issues
 
 ## DB責務
 
-- 計画条件と状態を保持する計画テーブル
-- タスクのスナップショット、担当枠、日付、依存タスクIDを保持する計画項目テーブル
-- タスクIDを一意とし、Backlog課題ID・キー・URL・発行日時を保持するタスクBacklog紐づきテーブル
+- `backlog_plans`はチェックリストID、プロジェクト設定スナップショット、期間、想定担当者数、`planned`/`partial`/`issued`の状態を保持する
+- `backlog_plan_items`は計画IDとタスクIDの組を一意とし、タイトル・本文・工数のスナップショット、匿名担当枠、日付、依存タスクIDを保持する
+- `task_backlog_links`はタスクIDを一意とし、Backlog課題ID・キー・URL・発行日時を保持する
 - 現行のチェックリスト単位課題紐づきテーブルは廃止し、既存行は移行しない
 - チェックリスト一覧・詳細のBacklog登録状態は、配下タスクの紐づきを集計して返す
 

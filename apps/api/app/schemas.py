@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 TaskPriority = Literal["low", "medium", "high"]
+BacklogRegistrationStatus = Literal["unregistered", "partial", "registered"]
 
 
 class ChecklistWriteRequest(BaseModel):
@@ -120,11 +121,10 @@ class AIBulkTasksResponse(BaseModel):
 
 
 class BacklogRegistrationResponse(BaseModel):
-    is_registered: bool
-    link_id: int | None
-    backlog_issue_id: int | None
-    backlog_issue_key: str | None
-    backlog_issue_url: str | None
+    status: BacklogRegistrationStatus
+    issued_task_count: int
+    total_task_count: int
+    last_issued_at: datetime | None
 
 
 class ChecklistListItemResponse(BaseModel):
@@ -132,7 +132,7 @@ class ChecklistListItemResponse(BaseModel):
     name: str
     task_count: int
     assignee_count: int
-    backlog_last_registered_at: datetime | None
+    backlog_registration: BacklogRegistrationResponse
     updated_at: datetime
 
 
