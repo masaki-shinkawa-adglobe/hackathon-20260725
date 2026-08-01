@@ -4,7 +4,7 @@
 
 保存済みチェックリストの一覧と詳細を取得する。レスポンスには画面表示項目に加えて、画面遷移や後続操作で使用する各IDを含める。
 
-Backlog登録状況は、チェックリスト単位のBacklog紐づきテーブルを参照して返す。Backlogへの課題作成、更新、削除、同期は本APIの責務に含めない。
+Backlog登録状況は、配下タスクの`task_backlog_links`を集計して返す。タスクが0件または発行済みタスクが0件なら`unregistered`、一部だけ発行済みなら`partial`、全タスクが発行済みなら`registered`とする。Backlogへの課題作成、更新、削除、同期は本APIの責務に含めない。
 
 ## 一覧取得
 
@@ -27,7 +27,12 @@ Content-Type: application/json
       "name": "月次決算業務",
       "task_count": 2,
       "assignee_count": 3,
-      "backlog_last_registered_at": "2026-07-31T10:00:00+09:00",
+      "backlog_registration": {
+        "status": "partial",
+        "issued_task_count": 1,
+        "total_task_count": 2,
+        "last_issued_at": "2026-07-31T10:00:00+09:00"
+      },
       "updated_at": "2026-07-31T12:00:00+09:00"
     }
   ]
@@ -40,7 +45,10 @@ Content-Type: application/json
 | `checklists[].name` | string | チェックリスト名 |
 | `checklists[].task_count` | integer | 対象チェックリストに紐づくタスク数 |
 | `checklists[].assignee_count` | integer | チェックリストの想定担当者数 |
-| `checklists[].backlog_last_registered_at` | string \| null | Backlog登録日時。登録済みなら `checklist_backlog_links.registered_at`、未登録なら `null` |
+| `checklists[].backlog_registration.status` | `unregistered` \| `partial` \| `registered` | タスク単位のBacklog登録状態 |
+| `checklists[].backlog_registration.issued_task_count` | integer | Backlog発行済みタスク数 |
+| `checklists[].backlog_registration.total_task_count` | integer | 配下タスク総数 |
+| `checklists[].backlog_registration.last_issued_at` | string \| null | 最終発行日時。未発行なら`null` |
 | `checklists[].updated_at` | string | チェックリスト最終更新日時。`checklists.updated_at` をISO 8601形式で返す |
 
 ## 詳細取得
@@ -68,13 +76,7 @@ Content-Type: application/json
   "name": "月次決算業務",
   "description": "月次決算の標準チェックリスト",
   "assignee_count": 3,
-  "backlog_registration": {
-    "is_registered": true,
-    "link_id": 10,
-    "backlog_issue_id": 12345,
-    "backlog_issue_key": "PROJ-100",
-    "backlog_issue_url": "https://example.backlog.com/view/PROJ-100"
-  },
+  "backlog_registration": {"status": "registered", "issued_task_count": 1, "total_task_count": 1, "last_issued_at": "2026-07-31T10:00:00+09:00"},
   "tasks": [
     {
       "id": 1,
@@ -93,11 +95,10 @@ Content-Type: application/json
 | `name` | string | チェックリスト名 |
 | `description` | string \| null | チェックリスト概要 |
 | `assignee_count` | integer | チェックリストの想定担当者数 |
-| `backlog_registration.is_registered` | boolean | Backlog課題と紐づいているか |
-| `backlog_registration.link_id` | integer \| null | チェックリストBacklog紐づきID。未登録時は `null` |
-| `backlog_registration.backlog_issue_id` | integer \| null | Backlog課題ID。未登録時は `null` |
-| `backlog_registration.backlog_issue_key` | string \| null | Backlog課題キー。未登録時は `null` |
-| `backlog_registration.backlog_issue_url` | string \| null | Backlog課題URL。未登録時は `null` |
+| `backlog_registration.status` | `unregistered` \| `partial` \| `registered` | タスク単位のBacklog登録状態 |
+| `backlog_registration.issued_task_count` | integer | Backlog発行済みタスク数 |
+| `backlog_registration.total_task_count` | integer | 配下タスク総数 |
+| `backlog_registration.last_issued_at` | string \| null | 最終発行日時。未発行なら`null` |
 | `tasks[].id` | integer | タスクID |
 | `tasks[].checklist_id` | integer | 紐づくチェックリストID |
 | `tasks[].title` | string | タスク名 |

@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
@@ -7,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import selectinload
 from starlette.datastructures import UploadFile
 
 from app.database import engine, get_session
@@ -19,7 +20,7 @@ from app.gemini import (
     TaskSource,
     get_task_generator,
 )
-from app.models import Checklist, ChecklistBacklogLink, Task
+from app.models import Checklist, Task, TaskBacklogLink
 from app.file_processing import FileValidationError, process_upload, read_upload_with_limit
 from app.schemas import (
     AIBulkTasksResponse,
@@ -48,21 +49,20 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(lifespan=lifespan)
 
 
-def backlog_registration(link: ChecklistBacklogLink | None) -> BacklogRegistrationResponse:
-    if link is None:
-        return BacklogRegistrationResponse(
-            is_registered=False,
-            link_id=None,
-            backlog_issue_id=None,
-            backlog_issue_key=None,
-            backlog_issue_url=None,
-        )
+def backlog_registration(
+    issued_task_count: int, total_task_count: int, last_issued_at: datetime | None
+) -> BacklogRegistrationResponse:
+    if issued_task_count == 0:
+        registration_status = "unregistered"
+    elif issued_task_count == total_task_count:
+        registration_status = "registered"
+    else:
+        registration_status = "partial"
     return BacklogRegistrationResponse(
-        is_registered=True,
-        link_id=link.id,
-        backlog_issue_id=link.backlog_issue_id,
-        backlog_issue_key=link.backlog_issue_key,
-        backlog_issue_url=link.backlog_issue_url,
+        status=registration_status,
+        issued_task_count=issued_task_count,
+        total_task_count=total_task_count,
+        last_issued_at=last_issued_at,
     )
 
 
@@ -92,15 +92,25 @@ async def create_checklist(
 async def list_checklists(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ChecklistsResponse:
-    task_counts = (
-        select(Task.checklist_id, func.count(Task.id).label("task_count"))
+    registration_summary = (
+        select(
+            Task.checklist_id,
+            func.count(Task.id).label("task_count"),
+            func.count(TaskBacklogLink.id).label("issued_task_count"),
+            func.max(TaskBacklogLink.issued_at).label("last_issued_at"),
+        )
+        .outerjoin(TaskBacklogLink, TaskBacklogLink.task_id == Task.id)
         .group_by(Task.checklist_id)
         .subquery()
     )
     result = await session.execute(
-        select(Checklist, task_counts.c.task_count, ChecklistBacklogLink)
-        .outerjoin(task_counts, task_counts.c.checklist_id == Checklist.id)
-        .outerjoin(ChecklistBacklogLink, ChecklistBacklogLink.checklist_id == Checklist.id)
+        select(
+            Checklist,
+            registration_summary.c.task_count,
+            registration_summary.c.issued_task_count,
+            registration_summary.c.last_issued_at,
+        )
+        .outerjoin(registration_summary, registration_summary.c.checklist_id == Checklist.id)
         .order_by(Checklist.id)
     )
     return ChecklistsResponse(
@@ -110,10 +120,12 @@ async def list_checklists(
                 name=checklist.name,
                 task_count=task_count or 0,
                 assignee_count=checklist.assignee_count,
-                backlog_last_registered_at=link.registered_at if link else None,
+                backlog_registration=backlog_registration(
+                    issued_task_count or 0, task_count or 0, last_issued_at
+                ),
                 updated_at=checklist.updated_at,
             )
-            for checklist, task_count, link in result.all()
+            for checklist, task_count, issued_task_count, last_issued_at in result.all()
         ]
     )
 
@@ -155,8 +167,7 @@ async def get_checklist(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ChecklistDetailResponse:
     checklist = await session.scalar(
-        select(Checklist)
-        .options(joinedload(Checklist.backlog_link), selectinload(Checklist.tasks))
+        select(Checklist).options(selectinload(Checklist.tasks).selectinload(Task.backlog_link))
         .where(Checklist.id == checklist_id)
     )
     if checklist is None:
@@ -166,7 +177,14 @@ async def get_checklist(
         name=checklist.name,
         description=checklist.description,
         assignee_count=checklist.assignee_count,
-        backlog_registration=backlog_registration(checklist.backlog_link),
+        backlog_registration=backlog_registration(
+            sum(task.backlog_link is not None for task in checklist.tasks),
+            len(checklist.tasks),
+            max(
+                (task.backlog_link.issued_at for task in checklist.tasks if task.backlog_link is not None),
+                default=None,
+            ),
+        ),
         tasks=checklist.tasks,
     )
 
